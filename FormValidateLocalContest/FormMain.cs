@@ -368,37 +368,52 @@ public partial class FormMain : Form
         string csprojPath = csprojFiles[0];
         string projectName = Path.GetFileNameWithoutExtension(csprojPath);
 
-        // Crear directorio de trabajo temporal
-        string workDir = Path.Combine(problemaDirectory!, "WorkDir");
-        if (Directory.Exists(workDir))
+        // Always use a unique WorkDir per run to avoid conflicts and locking issues
+        string workDir = Path.Combine(problemaDirectory!, $"WorkDir_{DateTime.Now:yyyyMMddHHmmss}_{Guid.NewGuid():N}");
+        int createRetries = 0;
+        const int maxCreateRetries = 50;
+        bool created = false;
+        Exception? lastCreateEx = null;
+        while (!created && createRetries < maxCreateRetries)
         {
             try
             {
-                Directory.Delete(workDir, true);
-                // Esperar a que Windows termine de eliminar el directorio
+                Directory.CreateDirectory(workDir);
+                created = Directory.Exists(workDir);
+            }
+            catch (Exception ex)
+            {
+                lastCreateEx = ex;
                 await Task.Delay(100);
-                
-                // Verificar que realmente se eliminó
-                int retries = 0;
-                while (Directory.Exists(workDir) && retries < 10)
+            }
+            createRetries++;
+        }
+        if (!created)
+        {
+            throw new IOException($"Failed to create working directory: {workDir}\n{lastCreateEx}");
+        }
+
+        // Clean up old WorkDirs in the background (best effort, non-blocking)
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                var parent = Directory.GetParent(workDir)?.FullName ?? problemaDirectory!;
+                var oldDirs = Directory.GetDirectories(parent, "WorkDir_*");
+                foreach (var dir in oldDirs)
                 {
-                    await Task.Delay(50);
-                    retries++;
+                    try
+                    {
+                        if (dir != workDir)
+                        {
+                            Directory.Delete(dir, true);
+                        }
+                    }
+                    catch { /* Ignore errors, best effort */ }
                 }
             }
-            catch
-            {
-                // Si no se puede eliminar, usar un nombre alternativo
-                workDir = Path.Combine(problemaDirectory!, $"WorkDir_{DateTime.Now:yyyyMMddHHmmss}");
-            }
-        }
-        Directory.CreateDirectory(workDir);
-        
-        // Verificar que el directorio fue creado correctamente
-        if (!Directory.Exists(workDir))
-        {
-            throw new IOException($"No se pudo crear el directorio de trabajo: {workDir}");
-        }
+            catch { }
+        });
 
         toolStripStatusLabel.Text = "Preparando directorio de trabajo...";
         Application.DoEvents();
