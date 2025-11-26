@@ -1,4 +1,54 @@
 
+
+/*
+ * =============================================
+ *  VALIDATION FLOW WITH PER-PROBLEM VALIDATOR
+ * =============================================
+ *
+ * For each test (input file):
+ *   1. Compile and run the student's program with the input file.
+ *   2. Save the student's output to a file.
+ *   3. Check if a Validator<id> subdirectory exists for this test:
+ *      - If YES:
+ *          a. Compile the validator's .csproj.
+ *          b. Run the validator, passing as arguments:
+ *             [inputPath] [expectedPath] [actualPath]
+ *          c. If the validator prints "OK" and exits with code 0, the test is correct.
+ *             Otherwise, the test is incorrect and the validator's output is shown.
+ *      - If NO:
+ *          a. Compare the student's output with the expected output (normalized).
+ *          b. If they match, the test is correct; otherwise, incorrect.
+ *
+ *   4. Show the result in the UI for each test.
+ *
+ *
+ * Text Diagram:
+ *
+ * [START TEST]
+ *     |
+ *     v
+ * [Compile & Run Student]
+ *     |
+ *     v
+ * Does Validator<id> exist?
+ *   /        \
+ *  Yes        No
+ *  |           |
+ * [Compile   [Compare
+ *  Validator]  outputs]
+ *  |           |
+ * [Run       Do outputs
+ *  Validator]  match?
+ *  |        /      \
+ *OK&0?   Yes      No
+ * /   \   |        |
+ *Yes  No [OK]   [WRONG]
+ * |    |
+ *[OK] [Custom message]
+ *
+ * This allows advanced, per-problem validation logic, or default output comparison.
+ */
+
 using System.Diagnostics;
 using System.Text;
 
@@ -64,6 +114,7 @@ public partial class FormMain : Form
 
 
     private string? selectedFilePath;
+    private string? selectedProblem;
     private string? problemaDirectory;
     private CancellationTokenSource? cancellationTokenSource;
 
@@ -241,7 +292,7 @@ public partial class FormMain : Form
             return;
 
         // Construir la ruta del problema seleccionado
-        string selectedProblem = lstProblems.SelectedItem.ToString()!;
+        selectedProblem = lstProblems.SelectedItem.ToString()!;
         string problemPath = Path.Combine(extractedProblemsPath, selectedProblem);
 
         // Actualizar el textbox y la variable problemaDirectory para que el validador use este dataset
@@ -505,14 +556,43 @@ public partial class FormMain : Form
                 throw new FileNotFoundException("No se encontraron archivos datos*.txt en el directorio IN");
             }
 
+            // --- Custom Validator Support ---
+            // If Validator<id> exists, compile and run it
+            string validatorDir = Path.Combine(problemaDirectory!, $"Validator{selectedProblem}");
+            string? validatorExe = null;
+            if (Directory.Exists(validatorDir))
+            {
+                // Find .csproj
+                var validatorProj = Directory.GetFiles(validatorDir, "*.csproj").FirstOrDefault();
+                if (validatorProj != null)
+                {
+                    // Compile validator
+                    var validatorBuild = await RunProcessAsync("dotnet", $"build \"{validatorProj}\"", validatorDir, timeoutSeconds * 1000);
+                    if (validatorBuild.ExitCode == 0)
+                    {
+                        // Find validator exe
+                        var binDebug = Path.Combine(validatorDir, "bin", "Debug");
+                        if (Directory.Exists(binDebug))
+                        {
+                            frameworks = Directory.GetDirectories(binDebug);
+                            if (frameworks.Length > 0)
+                            {
+                                var exeName = Path.GetFileNameWithoutExtension(validatorProj) + ".exe";
+                                validatorExe = Path.Combine(frameworks[0], exeName);
+                            }
+                        }
+                    }
+                }
+            }
             int totalTests = inputFiles.Count;
             int passedTests = 0;
             int failedTests = 0;
             StringBuilder results = new StringBuilder();
 
+
             foreach (var inputFile in inputFiles)
             {
-                // Verificar si se ha solicitado cancelación
+                // Check for cancellation
                 cancellationToken.ThrowIfCancellationRequested();
 
                 string fileName = Path.GetFileName(inputFile);
@@ -522,41 +602,39 @@ public partial class FormMain : Form
 
                 if (!File.Exists(expectedOutputFile))
                 {
-                    string message = $"⚠️ Test {testNumber}: Archivo de salida esperado no encontrado";
+                    string message = $"⚠️ Test {testNumber}: Expected output file not found";
                     results.AppendLine(message);
                     lstResults.Items.Add(message);
                     failedTests++;
                     continue;
                 }
 
-                toolStripStatusLabel.Text = $"Ejecutando test {testNumber}... ({passedTests + failedTests}/{totalTests})";
+                toolStripStatusLabel.Text = $"Running test {testNumber}... ({passedTests + failedTests}/{totalTests})";
                 Application.DoEvents();
 
                 try
                 {
-                    // Leer el archivo de entrada como UTF-8 sin BOM
-                    // Esto asegura que los acentos y caracteres especiales se lean correctamente
+                    // Read input as UTF-8 without BOM
                     string inputText;
                     using (var reader = new StreamReader(inputFile, new UTF8Encoding(false)))
                     {
                         inputText = await reader.ReadToEndAsync();
                     }
 
-                    // Guardar inputText en archivo temporal UTF-8 sin BOM
+                    // Save input to temp file
                     string tempInputFile = Path.Combine(Path.GetTempPath(), $"input_{Guid.NewGuid():N}.txt");
                     await File.WriteAllTextAsync(tempInputFile, inputText, new UTF8Encoding(false), cancellationToken);
 
-                    // Ejecutar usando cmd.exe, chcp 65001 y redirección type archivo | exe
-                    // Esto fuerza la consola a UTF-8 y pasa el input por stdin
+                    // Run student's program
                     var runResult = await RunProcessWithRedirectionAsync(exePath, tempInputFile, problemaDirectory!, timeoutSeconds * 1000);
 
-                    // Borrar archivo temporal
+                    // Delete temp input
                     try { File.Delete(tempInputFile); } catch { }
 
                     string message;
                     if (runResult.TimedOut)
                     {
-                        message = $"⏱️ Test {testNumber}: TIMEOUT (excedió {timeoutSeconds} segundos)";
+                        message = $"⏱️ Test {testNumber}: TIMEOUT (>{timeoutSeconds} seconds)";
                         results.AppendLine(message);
                         lstResults.Items.Add(message);
                         failedTests++;
@@ -565,75 +643,99 @@ public partial class FormMain : Form
 
                     if (runResult.ExitCode != 0)
                     {
-                        // Mostrar solo la primera línea del error para que sea más legible
-                        string errorDetail = "El programa terminó con código de error";
-                        
+                        string errorDetail = "Program exited with error code";
                         if (!string.IsNullOrWhiteSpace(runResult.Error))
                         {
                             var errorLines = runResult.Error.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                            // Buscar la línea que contiene "exception" o mostrar la primera línea
                             var exceptionLine = errorLines.FirstOrDefault(l => l.Contains("Exception", StringComparison.OrdinalIgnoreCase));
                             errorDetail = exceptionLine ?? errorLines.FirstOrDefault() ?? errorDetail;
                         }
-                        
                         message = $"❌ Test {testNumber}: {errorDetail}";
                         results.AppendLine(message);
-                        // Para el resumen completo, agregar más detalles
                         if (!string.IsNullOrWhiteSpace(runResult.Error))
                         {
-                            results.AppendLine($"   Detalles: {runResult.Error.Substring(0, Math.Min(200, runResult.Error.Length))}...");
+                            results.AppendLine($"   Details: {runResult.Error.Substring(0, Math.Min(200, runResult.Error.Length))}...");
                         }
                         lstResults.Items.Add(message);
-                        
-                        // Si hay salida, también guardarla para análisis
                         if (!string.IsNullOrWhiteSpace(runResult.Output))
                         {
                             await File.WriteAllTextAsync(generatedOutputFile, runResult.Output, Encoding.UTF8, cancellationToken);
                         }
-                        
                         failedTests++;
                         continue;
                     }
 
-                    // Guardar la salida generada como UTF-8 sin BOM
+                    // Save student's output
                     await File.WriteAllTextAsync(generatedOutputFile, runResult.Output, new UTF8Encoding(false), cancellationToken);
 
-                    // Comparar salidas
-                    string expectedOutput;
-                    // Leer el archivo esperado como UTF-8 explícitamente
-                    // Esto es importante para que la comparación sea byte a byte en UTF-8
-                    using (var reader = new StreamReader(expectedOutputFile, Encoding.UTF8))
+                    // --- Custom Validator Support ---
+                    // If Validator<id> exists, compile and run it
+                    string? validatorResult = null;
+                    bool validatorOk = false;
+                    if (Directory.Exists(validatorDir) && validatorExe != null && File.Exists(validatorExe))
                     {
-                        expectedOutput = await reader.ReadToEndAsync();
+                        // Run validator: args = input, expected, actual
+                        var validatorRun = await RunProcessAsync(validatorExe, $"\"{inputFile}\" \"{expectedOutputFile}\" \"{generatedOutputFile}\"", validatorDir, timeoutSeconds * 1000);
+                        validatorResult = validatorRun.Output.Trim();
+                        if (validatorRun.ExitCode == 0 && validatorResult.Equals("OK", StringComparison.OrdinalIgnoreCase))
+                        {
+                            validatorOk = true;
+                        }
+                        else
+                        {
+                            validatorOk = false;
+                        }
                     }
 
-                    string actualOutput = runResult.Output;
-
-                    // Normalizar líneas para comparación (quitar espacios al final y líneas vacías al final)
-                    string normalizedExpected = NormalizeOutput(expectedOutput);
-                    string normalizedActual = NormalizeOutput(actualOutput);
-
-                    if (normalizedExpected == normalizedActual)
+                    if (validatorResult != null)
                     {
-                        message = $"✅ Test {testNumber}: CORRECTO";
-                        results.AppendLine(message);
-                        lstResults.Items.Add(message);
-                        passedTests++;
+                        if (validatorOk)
+                        {
+                            message = $"✅ Test {testNumber}: OK (custom validator)";
+                            results.AppendLine(message);
+                            lstResults.Items.Add(message);
+                            passedTests++;
+                        }
+                        else
+                        {
+                            message = $"❌ Test {testNumber}: {validatorResult}";
+                            results.AppendLine(message);
+                            lstResults.Items.Add(message);
+                            failedTests++;
+                        }
                     }
                     else
                     {
-                        message = $"❌ Test {testNumber}: ERRÓNEO (salida no coincide)";
-                        results.AppendLine(message);
-                        lstResults.Items.Add(message);
-                        failedTests++;
+                        // Default: compare outputs
+                        string expectedOutput;
+                        using (var reader = new StreamReader(expectedOutputFile, Encoding.UTF8))
+                        {
+                            expectedOutput = await reader.ReadToEndAsync();
+                        }
+                        string actualOutput = runResult.Output;
+                        string normalizedExpected = NormalizeOutput(expectedOutput);
+                        string normalizedActual = NormalizeOutput(actualOutput);
+                        if (normalizedExpected == normalizedActual)
+                        {
+                            message = $"✅ Test {testNumber}: CORRECT";
+                            results.AppendLine(message);
+                            lstResults.Items.Add(message);
+                            passedTests++;
+                        }
+                        else
+                        {
+                            message = $"❌ Test {testNumber}: WRONG OUTPUT";
+                            results.AppendLine(message);
+                            lstResults.Items.Add(message);
+                            failedTests++;
+                        }
                     }
-                    
-                    // Auto-scroll al último elemento
+                    // Auto-scroll
                     lstResults.TopIndex = lstResults.Items.Count - 1;
                 }
                 catch (Exception ex)
                 {
-                    string message = $"💥 Test {testNumber}: EXCEPCIÓN - {ex.Message}";
+                    string message = $"💥 Test {testNumber}: EXCEPTION - {ex.Message}";
                     results.AppendLine(message);
                     lstResults.Items.Add(message);
                     failedTests++;
