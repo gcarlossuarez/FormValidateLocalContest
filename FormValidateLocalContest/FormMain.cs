@@ -477,6 +477,8 @@ public partial class FormMain : Form
         toolStripStatusLabel.Text = "Preparando directorio de trabajo...";
         Application.DoEvents();
 
+        // Timeout extendido para compilación: 5 minutos (300000 ms)
+        const int buildTimeoutMs = 300_000;
         try
         {
             // Copiar el .csproj al directorio de trabajo con reintentos
@@ -500,8 +502,8 @@ public partial class FormMain : Form
             toolStripStatusLabel.Text = "Compilando el proyecto...";
             Application.DoEvents();
 
-            //var compileResult = await RunProcessAsync("dotnet", "build -c Release", workDir, timeoutSeconds * 1000);
-            var compileResult = await RunProcessAsync("dotnet", "build", workDir, timeoutSeconds * 1000);
+            
+            var compileResult = await RunProcessAsync("dotnet", "build", workDir, buildTimeoutMs);
             
             if (compileResult.ExitCode != 0)
             {
@@ -625,7 +627,7 @@ public partial class FormMain : Form
                 if (validatorProj != null)
                 {
                     // Compile validator
-                    var validatorBuild = await RunProcessAsync("dotnet", $"build \"{validatorProj}\"", validatorDir, timeoutSeconds * 1000);
+                    var validatorBuild = await RunProcessAsync("dotnet", $"build \"{validatorProj}\"", validatorDir, buildTimeoutMs);
                     if (validatorBuild.ExitCode == 0)
                     {
                         // Find validator exe con reintentos y bloqueo exclusivo
