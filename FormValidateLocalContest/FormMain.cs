@@ -2,7 +2,7 @@
 
 /*
  * =============================================
- *  VALIDATION FLOW WITH PER-PROBLEM VALIDATOR
+ *  BOOKMARK: VALIDATION FLOW WITH PER-PROBLEM VALIDATOR
  * =============================================
  *
  * For each test (input file):
@@ -58,7 +58,7 @@ public partial class FormMain : Form
 {
     /*
      * ===============================
-     *  DIAGRAMA DE FLUJO PRINCIPAL
+     *  BOOKMARK: DIAGRAMA DE FLUJO PRINCIPAL
      * ===============================
      *
      * [Inicio App]
@@ -132,7 +132,7 @@ public partial class FormMain : Form
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
     }
     /// <summary>
-    /// Llena el ListBox lstProblemas con los nombres de los problemas extraídos del ZIP.
+    /// BOOKMARK: Llena el ListBox lstProblemas con los nombres de los problemas extraídos del ZIP.
     /// </summary>
     private void PopulateProblemsListBox()
     {
@@ -149,7 +149,7 @@ public partial class FormMain : Form
     }
 
     /// <summary>
-    /// Extrae el recurso incrustado Problems.zip a un directorio temporal y retorna la ruta de extracción.
+    /// BOOKMARK: Extrae el recurso incrustado Problems.zip a un directorio temporal y retorna la ruta de extracción.
     /// </summary>
     /// <returns>Ruta del directorio donde se extrajo el ZIP</returns>
     private string ExtractEmbeddedZipToTemp()
@@ -430,12 +430,20 @@ public partial class FormMain : Form
             try
             {
                 Directory.CreateDirectory(workDir);
-                created = Directory.Exists(workDir);
+                // Intentar obtener bloqueo exclusivo creando y abriendo un archivo temporal
+                string lockFile = Path.Combine(workDir, "__lock.tmp");
+                using (var fs = new FileStream(lockFile, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
+                {
+                    // Si llegamos aquí, tenemos acceso exclusivo
+                    created = Directory.Exists(workDir);
+                }
+                File.Delete(lockFile);
             }
             catch (Exception ex)
             {
                 lastCreateEx = ex;
-                await Task.Delay(100);
+                MessageBox.Show($"Error al crear el directorio de trabajo o al obtener acceso exclusivo:\n{workDir}\n\n{ex}", "Error WorkDir", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                await Task.Delay(200);
             }
             createRetries++;
         }
@@ -471,13 +479,22 @@ public partial class FormMain : Form
 
         try
         {
-            // Copiar el .csproj al directorio de trabajo
+            // Copiar el .csproj al directorio de trabajo con reintentos
             string workCsprojPath = Path.Combine(workDir, Path.GetFileName(csprojPath));
-            File.Copy(csprojPath, workCsprojPath, true);
-
-            // Guardar el código en Program.cs en el directorio de trabajo
+            int copyTries = 0;
+            while (copyTries < 10)
+            {
+                try { File.Copy(csprojPath, workCsprojPath, true); break; }
+                catch { await Task.Delay(100); copyTries++; }
+            }
+            // Guardar el código en Program.cs en el directorio de trabajo con reintentos
             string programPath = Path.Combine(workDir, "Program.cs");
-            await File.WriteAllTextAsync(programPath, txtCode.Text, Encoding.UTF8);
+            int writeTries = 0;
+            while (writeTries < 10)
+            {
+                try { await File.WriteAllTextAsync(programPath, txtCode.Text, Encoding.UTF8); break; }
+                catch { await Task.Delay(100); writeTries++; }
+            }
 
             // Compilar en el directorio de trabajo
             toolStripStatusLabel.Text = "Compilando el proyecto...";
@@ -498,17 +515,58 @@ public partial class FormMain : Form
             await Task.Delay(100);
 
             // Buscar el ejecutable compilado en el directorio de trabajo
+
             string binPath = Path.Combine(workDir, "bin", "Debug");
             string[] frameworks = Directory.GetDirectories(binPath);
             if (frameworks.Length == 0)
             {
-                throw new DirectoryNotFoundException("No se encontró el directorio del framework en bin/Release");
+                throw new DirectoryNotFoundException("No se encontró el directorio del framework en bin/Debug");
             }
 
-            string exePath = Path.Combine(frameworks[0], $"{projectName}.exe");
-            if (!File.Exists(exePath))
+            // Buscar el .exe generado en cualquier framework
+            string? exePath = null;
+            int exeTries = 0;
+            while (exeTries < 10 && exePath == null)
             {
-                throw new FileNotFoundException($"No se encontró el ejecutable: {exePath}");
+                foreach (var fwDir in frameworks)
+                {
+                    var exeCandidate = Path.Combine(fwDir, $"{projectName}.exe");
+                    if (File.Exists(exeCandidate))
+                    {
+                        // Intentar abrir con acceso exclusivo
+                        try
+                        {
+                            using (var fs = new FileStream(exeCandidate, FileMode.Open, FileAccess.Read, FileShare.None)) { }
+                            exePath = exeCandidate;
+                            break;
+                        }
+                        catch { }
+                    }
+                }
+                if (exePath == null)
+                {
+                    foreach (var fwDir in frameworks)
+                    {
+                        var exes = Directory.GetFiles(fwDir, "*.exe");
+                        foreach (var ex in exes)
+                        {
+                            try
+                            {
+                                using (var fs = new FileStream(ex, FileMode.Open, FileAccess.Read, FileShare.None)) { }
+                                exePath = ex;
+                                break;
+                            }
+                            catch { }
+                        }
+                        if (exePath != null) break;
+                    }
+                }
+                if (exePath == null) await Task.Delay(200);
+                exeTries++;
+            }
+            if (exePath == null)
+            {
+                throw new FileNotFoundException($"No se encontró ningún ejecutable .exe en {binPath} o subdirectorios.\nVerifique que la compilación fue exitosa y que el proyecto es de tipo WinExe/Exe.");
             }
 
             toolStripStatusLabel.Text = "Compilación exitosa. Ejecutando tests...";
@@ -570,15 +628,49 @@ public partial class FormMain : Form
                     var validatorBuild = await RunProcessAsync("dotnet", $"build \"{validatorProj}\"", validatorDir, timeoutSeconds * 1000);
                     if (validatorBuild.ExitCode == 0)
                     {
-                        // Find validator exe
+                        // Find validator exe con reintentos y bloqueo exclusivo
                         var binDebug = Path.Combine(validatorDir, "bin", "Debug");
                         if (Directory.Exists(binDebug))
                         {
                             frameworks = Directory.GetDirectories(binDebug);
-                            if (frameworks.Length > 0)
+                            int valExeTries = 0;
+                            while (valExeTries < 10 && validatorExe == null)
                             {
-                                var exeName = Path.GetFileNameWithoutExtension(validatorProj) + ".exe";
-                                validatorExe = Path.Combine(frameworks[0], exeName);
+                                foreach (var fwDir in frameworks)
+                                {
+                                    var exeName = Path.GetFileNameWithoutExtension(validatorProj) + ".exe";
+                                    var exeCandidate = Path.Combine(fwDir, exeName);
+                                    if (File.Exists(exeCandidate))
+                                    {
+                                        try
+                                        {
+                                            using (var fs = new FileStream(exeCandidate, FileMode.Open, FileAccess.Read, FileShare.None)) { }
+                                            validatorExe = exeCandidate;
+                                            break;
+                                        }
+                                        catch { }
+                                    }
+                                }
+                                if (validatorExe == null)
+                                {
+                                    foreach (var fwDir in frameworks)
+                                    {
+                                        var exes = Directory.GetFiles(fwDir, "*.exe");
+                                        foreach (var ex in exes)
+                                        {
+                                            try
+                                            {
+                                                using (var fs = new FileStream(ex, FileMode.Open, FileAccess.Read, FileShare.None)) { }
+                                                validatorExe = ex;
+                                                break;
+                                            }
+                                            catch { }
+                                        }
+                                        if (validatorExe != null) break;
+                                    }
+                                }
+                                if (validatorExe == null) await Task.Delay(200);
+                                valExeTries++;
                             }
                         }
                     }
