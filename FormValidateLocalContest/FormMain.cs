@@ -56,6 +56,10 @@ namespace FormValidateLocalContest;
 
 public partial class FormMain : Form
 {
+    // Controles de progreso para la descompresión
+    private ProgressBar progressBarExtract;
+    private Label labelExtractStatus;
+
     /*
      * ===============================
      *  BOOKMARK: DIAGRAMA DE FLUJO PRINCIPAL
@@ -124,9 +128,46 @@ public partial class FormMain : Form
     public FormMain()
     {
         InitializeComponent();
-        // Al iniciar, extrae el ZIP de problemas y llena el ListBox
-        extractedProblemsPath = ExtractEmbeddedZipToTemp();
-        PopulateProblemsListBox();
+
+        // Agregar ProgressBar y Label para mostrar progreso de descompresión
+        progressBarExtract = new ProgressBar
+        {
+            Minimum = 0,
+            Maximum = 100,
+            Value = 0,
+            Visible = false,
+            Width = 300,
+            Height = 20,
+            Top = 10,
+            Left = this.ClientSize.Width - 330
+        };
+        labelExtractStatus = new Label
+        {
+            Text = "",
+            Visible = false,
+            AutoSize = true,
+            Top = progressBarExtract.Bottom + 5,
+            Left = this.ClientSize.Width - 330
+        };
+        Controls.Add(progressBarExtract);
+        Controls.Add(labelExtractStatus);
+
+        // Al iniciar, extrae el ZIP de problemas y llena el ListBox.
+        // Se dispara en un Task para no bloquear la UI y que se pueda visualizar el
+        // formulario mientras se extrae.
+        Task.Run(async () =>
+        {
+            btnCompileAndRun.Enabled = false;
+            btnSelectProblemaDir.Enabled = false;
+            await ExtractEmbeddedZipToTempWithProgress();
+            // Una vez extraído, llena el ListBox en el hilo de la UI
+            Invoke(new Action(() => PopulateProblemsListBox()));
+            Invoke(new Action(() =>
+            {
+                btnCompileAndRun.Enabled = true;
+                btnSelectProblemaDir.Enabled = true;
+            }));
+        });
 
         // Habilita encodings extendidos (Windows-1252, etc.) en .NET Core/5+/6+/7+/8+
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
@@ -152,9 +193,18 @@ public partial class FormMain : Form
     /// BOOKMARK: Extrae el recurso incrustado Problems.zip a un directorio temporal y retorna la ruta de extracción.
     /// </summary>
     /// <returns>Ruta del directorio donde se extrajo el ZIP</returns>
-    private string ExtractEmbeddedZipToTemp()
+    // Nueva versión asíncrona con progreso
+    private async Task ExtractEmbeddedZipToTempWithProgress()
     {
-        // Nombre del recurso incrustado (namespace + nombre de archivo)
+        Invoke(new Action(() =>
+        {
+            progressBarExtract.Value = 0;
+            progressBarExtract.Visible = true;
+            labelExtractStatus.Text = "Descomprimiendo problemas...";
+            labelExtractStatus.Visible = true;
+            Refresh();
+        }));
+
         var resourceName = "FormValidateLocalContest.Problems.zip";
         var tempDir = Path.Combine(Path.GetTempPath(), "ProblemasContest_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
@@ -162,6 +212,11 @@ public partial class FormMain : Form
         using var stream = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName);
         if (stream == null)
         {
+            Invoke(new Action(() =>
+            {
+                progressBarExtract.Visible = false;
+                labelExtractStatus.Text = "No se encontró el recurso incrustado: " + resourceName;
+            }));
             MessageBox.Show($"No se encontró el recurso incrustado: {resourceName}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             throw new FileNotFoundException($"No se encontró el recurso incrustado: {resourceName}");
         }
@@ -170,16 +225,64 @@ public partial class FormMain : Form
         var tempZipPath = Path.Combine(tempDir, "Problems.zip");
         using (var fileStream = File.Create(tempZipPath))
         {
-            stream.CopyTo(fileStream);
+            await stream.CopyToAsync(fileStream);
         }
 
-        // Extraer el ZIP
-        System.IO.Compression.ZipFile.ExtractToDirectory(tempZipPath, tempDir);
+        // Leer entradas del ZIP para mostrar progreso
+        using (var zip = System.IO.Compression.ZipFile.OpenRead(tempZipPath))
+        {
+            int total = zip.Entries.Count;
+            int current = 0;
+            foreach (var entry in zip.Entries)
+            {
+                string destPath = Path.Combine(tempDir, entry.FullName);
+                string? destDir = Path.GetDirectoryName(destPath);
+                if (!string.IsNullOrEmpty(destDir)) Directory.CreateDirectory(destDir);
+                if (!entry.FullName.EndsWith("/"))
+                {
+                    using var entryStream = entry.Open();
+                    using var outStream = File.Create(destPath);
+                    await entryStream.CopyToAsync(outStream);
+                }
+                current++;
+                int percent = (int)(current * 100.0 / total);
+                // BOOKMARK Invoke(new Action(() =>):
+                // La instrucción `Invoke(new Action(() { ... }))` ejecuta el bloque
+                // de código dentro del hilo principal de la interfaz gráfica (UI 
+                // thread). 
+                // Esto es necesario porque los controles de WinForms solo pueden ser 
+                // modificados desde el hilo de la UI.
+                // Dentro de ese bloque, se actualizan el valor de la barra de 
+                // progreso y el texto del label, y se llama a `Refresh()` para forzar
+                // el repintado inmediato de los controles.
+                // IMPORTANTE:
+                // No es exactamente equivalente a `Application.DoEvents()`.  
+                // - `Invoke(...)` asegura que el código se ejecute en el hilo 
+                // correcto (UI), útil cuando el trabajo se hace en un hilo secundario.
+                // - `Application.DoEvents()` procesa todos los mensajes pendientes de
+                // la cola de eventos de la aplicación, permitiendo que la UI responda 
+                // mientras se ejecuta código largo en el hilo principal.
+                // En este caso, `Invoke(...)` es lo correcto para actualizar la UI 
+                // desde un hilo de fondo.
+                Invoke(new Action(() =>
+                {
+                    progressBarExtract.Value = percent;
+                    labelExtractStatus.Text = $"Descomprimiendo: {percent}% ({current}/{total})";
+                    Refresh();
+                }));
+            }
+        }
 
         // Eliminar el ZIP temporal
         File.Delete(tempZipPath);
 
-        return Path.Combine(tempDir, "Problems"); // Asumiendo que el ZIP contiene una carpeta raíz llamada "Problems"
+        extractedProblemsPath = Path.Combine(tempDir, "Problems");
+
+        Invoke(new Action(() =>
+        {
+            progressBarExtract.Visible = false;
+            labelExtractStatus.Visible = false;
+        }));
     }
 
     private void btnSelectFile_Click(object sender, EventArgs e)
@@ -246,6 +349,7 @@ public partial class FormMain : Form
         }
 
         btnCompileAndRun.Enabled = false;
+        btnSelectProblemaDir.Enabled = false;
         btnCancel.Enabled = true;
         lstResults.Items.Clear();
         toolStripStatusLabel.Text = "Compilando...";
@@ -271,6 +375,7 @@ public partial class FormMain : Form
         finally
         {
             btnCompileAndRun.Enabled = true;
+            btnSelectProblemaDir.Enabled = true;
             btnCancel.Enabled = false;
             cancellationTokenSource?.Dispose();
             cancellationTokenSource = null;
