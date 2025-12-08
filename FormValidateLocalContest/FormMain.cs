@@ -1034,8 +1034,21 @@ public partial class FormMain : Form
         };
     }
 
-    // Ejecuta el programa del usuario usando cmd.exe, chcp 65001 y redirección de archivo
-    // La salida estándar y de error se lee como UTF-8 para soportar caracteres especiales
+    /// <summary>
+    /// BOOKMARK: Ejecuta un proceso externo (el programa del usuario) usando redirección de entrada 
+    /// y salida, monitoreando en paralelo el uso de memoria y el tiempo de ejecución.
+    /// 
+    /// - El proceso se inicia y se lanza un monitor en segundo plano para verificar si excede el 
+    /// límite de memoria (512 MB).
+    /// - Se espera a que el proceso termine o se alcance el timeout especificado.
+    /// - Si el proceso termina normalmente, se recopila la salida y el código de salida.
+    /// - Si excede el tiempo o la memoria, se fuerza su terminación y se indica el motivo.
+    /// - Se asegura que la salida estándar y de error se lean como UTF-8.
+    /// </summary>
+    /// <remarks>
+    /// Ejecuta el programa del usuario usando cmd.exe, chcp 65001 y redirección de archivo
+    /// La salida estándar y de error se lee como UTF-8 para soportar caracteres especiales
+    /// </remarks>
     private async Task<ProcessResult> RunProcessWithRedirectionAsync(string exePath, string inputFile, string workingDirectory, int timeoutMs)
     {
         // Usar cmd.exe con chcp 65001 y redirección type archivo | exe
@@ -1071,16 +1084,19 @@ public partial class FormMain : Form
         const long MAX_MEMORY_MB = 512;
         bool memoryExceeded = false;
 
+        // Suscribirse a la salida estándar y de error para capturar la información del proceso
         process.OutputDataReceived += (s, e) => { if (e.Data != null) output.AppendLine(e.Data); };
         process.ErrorDataReceived += (s, e) => { if (e.Data != null) error.AppendLine(e.Data); };
 
         process.Start();
 
+        // Intentar bajar la prioridad del proceso para evitar que bloquee el sistema
         try { process.PriorityClass = ProcessPriorityClass.BelowNormal; } catch { }
 
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
+        // Lanzar una tarea en segundo plano para monitorear el uso de memoria del proceso
         var monitorTask = Task.Run(async () =>
         {
             while (!process.HasExited)
@@ -1091,6 +1107,7 @@ public partial class FormMain : Form
                     long memoryMB = process.WorkingSet64 / (1024 * 1024);
                     if (memoryMB > MAX_MEMORY_MB)
                     {
+                        // Si se excede el límite de memoria, terminar el proceso
                         memoryExceeded = true;
                         try { process.Kill(true); } catch { }
                         break;
@@ -1101,22 +1118,26 @@ public partial class FormMain : Form
             }
         });
 
+        // Esperar a que el proceso termine o se alcance el timeout
         bool completed = await Task.Run(() => process.WaitForExit(timeoutMs));
 
+        // Si no terminó a tiempo, forzar su terminación
         if (!completed)
         {
             try { process.Kill(true); } catch { }
             await monitorTask;
             return new ProcessResult
             {
-                TimedOut = !memoryExceeded,
+                TimedOut = !memoryExceeded, // true si fue timeout, false si fue por memoria
                 ExitCode = -1,
                 Error = memoryExceeded ? $"Memoria excedida (límite: {MAX_MEMORY_MB} MB)" : "Timeout"
             };
         }
 
+        // Esperar a que el monitor de memoria termine
         await monitorTask;
 
+        // Si terminó por exceso de memoria, reportar el error
         if (memoryExceeded)
         {
             return new ProcessResult
@@ -1126,6 +1147,7 @@ public partial class FormMain : Form
             };
         }
 
+        // Asegurarse de que todo el output se haya leído
         await Task.Run(() => process.WaitForExit());
 
         // Convertir la salida de Windows-1252 a UTF-8 para la comparación y escritura
