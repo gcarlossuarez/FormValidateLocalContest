@@ -498,6 +498,16 @@ public partial class FormMain : Form
         }
     }
 
+    /// <summary>
+    /// BOOKMARK: Compila el código fuente proporcionado y ejecuta las pruebas en el
+    /// directorio del problema.
+    /// </summary>
+    /// <param name="timeoutSeconds"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    /// <exception cref="DirectoryNotFoundException"></exception>
+    /// <exception cref="FileNotFoundException"></exception>
+    /// <exception cref="IOException"></exception>
     private async Task CompileAndRunTests(int timeoutSeconds, CancellationToken cancellationToken)
     {
         // Verificar estructura del problema
@@ -594,7 +604,7 @@ public partial class FormMain : Form
                 try { File.Copy(csprojPath, workCsprojPath, true); break; }
                 catch { await Task.Delay(100); copyTries++; }
             }
-            // Guardar el código en Program.cs en el directorio de trabajo con reintentos
+            // BOOKMARK: Guardar el código en Program.cs en el directorio de trabajo con reintentos
             string programPath = Path.Combine(workDir, "Program.cs");
             int writeTries = 0;
             while (writeTries < 10)
@@ -607,7 +617,7 @@ public partial class FormMain : Form
             toolStripStatusLabel.Text = "Compilando el proyecto...";
             Application.DoEvents();
 
-            
+            // BOOKMARK: Compilar el código del estudiante usando 'dotnet build' en el directorio de trabajo
             var compileResult = await RunProcessAsync("dotnet", "build", workDir, buildTimeoutMs);
             
             if (compileResult.ExitCode != 0)
@@ -721,7 +731,7 @@ public partial class FormMain : Form
                 throw new FileNotFoundException("No se encontraron archivos datos*.txt en el directorio IN");
             }
 
-            // --- Custom Validator Support ---
+            // BOOKMARK: --- Custom Validator Support (verificar si existe validador) ---
             // If Validator<id> exists, compile and run it
             string validatorDir = Path.Combine(problemaDirectory!, $"Validator{selectedProblem}");
             string? validatorExe = null;
@@ -731,11 +741,11 @@ public partial class FormMain : Form
                 var validatorProj = Directory.GetFiles(validatorDir, "*.csproj").FirstOrDefault();
                 if (validatorProj != null)
                 {
-                    // Compile validator
+                    // BOOKMARK: Compilar validator
                     var validatorBuild = await RunProcessAsync("dotnet", $"build \"{validatorProj}\"", validatorDir, buildTimeoutMs);
                     if (validatorBuild.ExitCode == 0)
                     {
-                        // Find validator exe con reintentos y bloqueo exclusivo
+                        // BOOKMARK: Buscar el validator exe con reintentos y bloqueo exclusivo
                         var binDebug = Path.Combine(validatorDir, "bin", "Debug");
                         if (Directory.Exists(binDebug))
                         {
@@ -760,6 +770,8 @@ public partial class FormMain : Form
                                 }
                                 if (validatorExe == null)
                                 {
+                                    // BOOKMARK: Si no encontró el exe del validador, buscar cualquier .exe que corresponda al
+                                    // validador
                                     foreach (var fwDir in frameworks)
                                     {
                                         var exes = Directory.GetFiles(fwDir, "*.exe");
@@ -788,7 +800,7 @@ public partial class FormMain : Form
             int failedTests = 0;
             StringBuilder results = new StringBuilder();
 
-
+            // BOOKMARK: Ejecutar test para cada archivo del directorio IN
             foreach (var inputFile in inputFiles)
             {
                 // Check for cancellation
@@ -824,7 +836,7 @@ public partial class FormMain : Form
                     string tempInputFile = Path.Combine(Path.GetTempPath(), $"input_{Guid.NewGuid():N}.txt");
                     await File.WriteAllTextAsync(tempInputFile, inputText, new UTF8Encoding(false), cancellationToken);
 
-                    // Run student's program
+                    // BOOKMARK: Run student's program
                     var runResult = await RunProcessWithRedirectionAsync(exePath, tempInputFile, problemaDirectory!, timeoutSeconds * 1000);
 
                     // Delete temp input
@@ -867,14 +879,14 @@ public partial class FormMain : Form
                     // Save student's output
                     await File.WriteAllTextAsync(generatedOutputFile, runResult.Output, new UTF8Encoding(false), cancellationToken);
 
-                    // --- Custom Validator Support ---
+                    // BOOKMARK: --- Custom Validator Support (ejecuta el validador, si existe validador) ---
                     // If Validator<id> exists, compile and run it
                     string? validatorResult = null;
                     bool validatorOk = false;
                     if (Directory.Exists(validatorDir) && validatorExe != null && File.Exists(validatorExe))
                     {
-                        // Run validator: args = input, expected, actual
-                        var validatorRun = await RunProcessAsync(validatorExe, $"\"{inputFile}\" \"{expectedOutputFile}\" \"{generatedOutputFile}\"", validatorDir, timeoutSeconds * 1000);
+                        // BOOKMARK: Run validator: args = input, expected, actual, program
+                        var validatorRun = await RunProcessAsync(validatorExe, $"\"{inputFile}\" \"{expectedOutputFile}\" \"{generatedOutputFile}\" \"{programPath}\"", validatorDir, timeoutSeconds * 1000);
                         validatorResult = validatorRun.Output.Trim();
                         if (validatorRun.ExitCode == 0 && validatorResult.Equals("OK", StringComparison.OrdinalIgnoreCase))
                         {
