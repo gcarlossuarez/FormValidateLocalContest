@@ -161,6 +161,7 @@ public partial class FormMain : Form
         Task.Run(async () =>
         {
             btnCompileAndRun.Enabled = false;
+            btnRunConsole.Enabled = false;
             btnSelectProblemaDir.Enabled = false;
             await ExtractEmbeddedZipToTempWithProgress();
             // Una vez extraído, llena el ListBox en el hilo de la UI
@@ -169,6 +170,7 @@ public partial class FormMain : Form
             {
                 btnCompileAndRun.Enabled = true;
                 btnSelectProblemaDir.Enabled = true;
+                btnRunConsole.Enabled = true;
             }));
         });
 
@@ -565,7 +567,7 @@ public partial class FormMain : Form
                 // Leer contenido como UTF-8 sin BOM
                 using (var reader = new StreamReader(dataFile, new UTF8Encoding(false)))
                 {
-                    txtStdin.Text = reader.ReadToEnd();
+                    txtStdin.Text = NormalizeCodeText(reader.ReadToEnd());
                 }
                 toolStripStatusLabel.Text = $"Dataset cargado: {selectedDataset}";
             }
@@ -744,19 +746,20 @@ public partial class FormMain : Form
                 try
                 {
                     // Ejecutar con stdin
-                    var runResult = await RunProcessWithRedirectionAsync(exePath, tempInputFile, problemaDirectory!, 30_000);
+                    int timeout = int.TryParse(txtTimeout.Text, out int parsedTimeout) ? parsedTimeout : 30;
+                    var runResult = await RunProcessWithRedirectionAsync(exePath, tempInputFile, problemaDirectory!, timeout * 1000);
 
                     if (runResult.TimedOut)
                     {
-                        txtStdout.Text = $"⏱️ Timeout - El programa tardó más de 30 segundos";
+                        txtStdout.Text = $"⏱️ Timeout - El programa tardó más de {timeout} segundos";
                     }
                     else if (runResult.ExitCode != 0)
                     {
-                        txtStdout.Text = $"❌ Error (Código {runResult.ExitCode}):\n{runResult.Error}\n\n📤 Salida:\n{runResult.Output}";
+                        txtStdout.Text = $"❌ Error (Código {runResult.ExitCode}):\r\n{runResult.Error}\r\n\r\n📤 Salida:\r\n{runResult.Output}";
                     }
                     else
                     {
-                        txtStdout.Text = $"✅ Ejecutado exitosamente\n\n📤 Salida:\n{runResult.Output}";
+                        txtStdout.Text = $"✅ Ejecutado exitosamente\r\n\r\n📤 Salida:\r\n{runResult.Output}";
                     }
 
                     toolStripStatusLabel.Text = "Ejecución de consola completada";
@@ -917,7 +920,6 @@ public partial class FormMain : Form
             await Task.Delay(100);
 
             // Buscar el ejecutable compilado en el directorio de trabajo
-
             string binPath = Path.Combine(workDir, "bin", "Debug");
             string[] frameworks = Directory.GetDirectories(binPath);
             if (frameworks.Length == 0)

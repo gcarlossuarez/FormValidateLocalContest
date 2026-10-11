@@ -25,6 +25,7 @@ partial class FormMain
         toolStripStatusLabel = new ToolStripStatusLabel();
         lblProblemaDir = new Label();
         txtProblemaDir = new TextBox();
+        lblDescripcion = new Label();
         txtDescripcion = new TextBox();
         btnSelectProblemaDir = new Button();
         lstResults = new ListBox();
@@ -63,8 +64,8 @@ partial class FormMain
         txtCode.WordWrap = false;
         txtCode.TextChanged += TxtCode_TextChanged;
         
-        lstResults.Location = new Point(508, 48);
-        lstResults.Size = new Size(476, 330);
+        lstResults.Location = new Point(1000, 58);
+        lstResults.Size = new Size(300, 352);
         lstResults.Font = new Font("Consolas", 9F);
         lstResults.HorizontalScrollbar = true;
         
@@ -85,41 +86,45 @@ partial class FormMain
         lblTimeout.Location = new Point(359, 390);
         lblTimeout.Text = "Timeout:";
         
-        txtTimeout.Location = new Point(405, 387);
+        txtTimeout.Location = new Point(415, 387);
         txtTimeout.Size = new Size(50, 23);
         txtTimeout.Text = "5";
         txtTimeout.TextAlign = HorizontalAlignment.Center;
         
         lblDatasets.AutoSize = true;
-        lblDatasets.Location = new Point(463, 390);
+        lblDatasets.Location = new Point(505, 412);
         lblDatasets.Text = "Datasets:";
         
-        cbDatasets.Location = new Point(520, 387);
-        cbDatasets.Size = new Size(464, 23);
+        cbDatasets.Location = new Point(558, 407);
+        cbDatasets.Size = new Size(428, 23);
         cbDatasets.SelectedIndexChanged += cbDatasets_SelectedIndexChanged;
         
         lstProblems.Location = new Point(12, 420);
         lstProblems.Size = new Size(476, 100);
         lstProblems.SelectedIndexChanged += lstProblems_SelectedIndexChanged;
         
-        txtDescripcion.Location = new Point(508, 420);
-        txtDescripcion.Size = new Size(476, 100);
+        lblDescripcion.AutoSize = true;
+        lblDescripcion.Location = new Point(508, 440);
+        lblDescripcion.Text = "Descripción del problema:";
+
+        txtDescripcion.Location = new Point(508, 460);
+        txtDescripcion.Size = new Size(476, 200);
         txtDescripcion.Font = new Font("Consolas", 9F);
         txtDescripcion.Multiline = true;
         txtDescripcion.ReadOnly = true;
         txtDescripcion.ScrollBars = ScrollBars.Vertical;
         
-        btnCompileAndRun.Location = new Point(12, 530);
+        btnCompileAndRun.Location = new Point(12, 550);
         btnCompileAndRun.Size = new Size(230, 35);
         btnCompileAndRun.Text = "Compilar y Ejecutar";
         btnCompileAndRun.Click += btnCompileAndRun_Click;
         
-        btnRunConsole.Location = new Point(250, 530);
+        btnRunConsole.Location = new Point(250, 550);
         btnRunConsole.Size = new Size(230, 35);
         btnRunConsole.Text = "Ejecutar Consola";
         btnRunConsole.Click += btnRunConsole_Click;
         
-        btnCancel.Location = new Point(508, 530);
+        btnCancel.Location = new Point(12, 600);
         btnCancel.Size = new Size(476, 35);
         btnCancel.Text = "Cancelar";
         btnCancel.Click += btnCancel_Click;
@@ -173,6 +178,7 @@ partial class FormMain
         Controls.Add(grpIOData);
         Controls.Add(cbDatasets);
         Controls.Add(lblDatasets);
+        Controls.Add(lblDescripcion);
         Controls.Add(txtDescripcion);
         Controls.Add(lstProblems);
         Controls.Add(btnSelectProblemaDir);
@@ -207,6 +213,7 @@ partial class FormMain
     private ToolStripStatusLabel toolStripStatusLabel;
     private Label lblProblemaDir;
     private TextBox txtProblemaDir;
+    private Label lblDescripcion;
     private TextBox txtDescripcion;
     private Button btnSelectProblemaDir;
     private ListBox lstResults;
