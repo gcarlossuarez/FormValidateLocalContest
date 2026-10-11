@@ -2,254 +2,199 @@
 
 ---yaml
 name: "push-protection"
-description: "Sistema de confirmación obligatoria antes de hacer push a GitHub"
+description: "Verificación de seguridad ANTES de hacer push - Scripts para agentes, libertad para usuario"
 author: "FormValidateLocalContest Team"
-version: "1.0.0"
-type: "hook"
-trigger: "pre-push"
+version: "2.0.0"
+type: "verification-script"
 ---
 
 ## Overview
 
-El skill **push-protection** proporciona un sistema de confirmación interactiva antes de hacer push a GitHub. Analiza commits, verifica seguridad y requiere confirmación explícita del usuario.
+El skill **push-protection 2.0** proporciona verificación de seguridad **sin bloquear al usuario**:
+- ✅ **Usuario** (tú): Libertad total en consola, sin hooks automáticos
+- ✅ **Agentes de IA**: Verificación automática antes de cada push
+- ✅ **Seguridad**: Detecta tokens, credenciales, API keys, archivos `.env`
 
-## Características
+## Estrategia
 
-### 1. Análisis de Commits
-- Lista todos los commits que serán empujados
-- Muestra asunto, autor y fecha de cada commit
-- Muestra número total de commits
+| Actor | Herramienta | Comportamiento |
+|-------|-------------|---|
+| **Tú (Usuario)** | `git push` directo | Sin restricciones, push libre |
+| **Yo (Agente)** | `.\safe-push.cmd` | Verifica → Pushea automático |
+| **Otro agente** | `.\verify-before-push.ps1` | Verifica (sin pushear) |
 
-### 2. Resumen de Cambios
-- Estadísticas de líneas modificadas por archivo
-- Lista completa de archivos afectados
-- Muestra qué fue agregado, modificado o eliminado
+## Scripts Disponibles
 
-### 3. Verificación de Seguridad
-Detecta y bloquea automáticamente:
-- Archivos con credenciales (`*token*`, `*secret*`, `*password*`)
-- Variables de entorno (`.env`, `.env.local`)
-- Claves criptográficas (`*key*`, `*private*`)
+### 1. `verify-before-push.ps1` (Verificación sin Push)
 
-### 4. Confirmación Interactiva
-- Requiere respuesta explícita del usuario (Y/N)
-- Cancela push si el usuario rechaza
-- Cancela push si se detectan archivos sospechosos
-- Preserva commits en local si se cancela
+**Ubicación**: Raíz del proyecto
 
-## Invocación
+**Uso**:
+```powershell
+# Verificar si hay secretos (NO hace push)
+.\verify-before-push.ps1
 
-El hook se ejecuta automáticamente con:
+# Con --Force ignora advertencias
+.\verify-before-push.ps1 -Force
+```
 
+**Retorna**:
+- `0` = OK, seguro para pushear
+- `1` = Secretos detectados, NO pushear
+
+**Detecta**:
+- GitHub Tokens (`gh_*`, `ghp_*`, `github_pat_*`)
+- AWS Keys (`AKIA*`)
+- Private Keys (RSA, OpenSSH, PGP)
+- API Keys y Passwords
+- Archivos `.env`
+
+**Ejemplo salida**:
+```
+========================================
+Verificando cambios antes de push...
+========================================
+
+Commits por pushear:
+3a6bc04 Auto sync and push
+fd67f59 Auto sync and push
+
+[OK] No se detectaron secretos. Seguro para pushear.
+```
+
+### 2. `safe-push.cmd` (Push Seguro para Agentes)
+
+**Ubicación**: Raíz del proyecto
+
+**Uso**:
+```batch
+.\safe-push.cmd
+```
+
+**Workflow**:
+1. Llama `verify-before-push.ps1`
+2. Si hay secretos → Bloquea (exit 1)
+3. Si está limpio → Hace push automático
+4. Agrega, commitea, rebase, push
+
+## Cómo Yo (Agente) lo Uso
+
+**Antes de hacer push automático**:
+
+```powershell
+# Opción 1: Verificar primero
+.\verify-before-push.ps1
+if ($LASTEXITCODE -eq 0) {
+    # Hacer push manualmente
+    git add .
+    git commit -m "Auto sync"
+    git push -u origin main
+}
+
+# Opción 2: Usar script combinado
+.\safe-push.cmd
+```
+
+**En código de agente**:
+```powershell
+# Pre-push verification step
+$verifyResult = & ".\verify-before-push.ps1"
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[BLOQUEADO] No se permite push con secretos detectados"
+    exit 1
+}
+Write-Host "[OK] Procediendo con push..."
+git push -u origin main
+```
+
+## Para Ti (Usuario)
+
+**TÚ TIENES LIBERTAD TOTAL**:
 ```bash
+# Esto funciona sin restricciones:
 git push origin main
+git push --force origin main
+git push --all
 ```
 
-Aparecerá un prompt interactivo pidiendo confirmación.
+Los scripts de verificación son **opcionales para ti**. Usúalos si quieres verificar, pero no son obligatorios.
 
-## Flujo de Ejecución
+## Patrones de Secretos Detectados
 
-```
-git push origin main
-         ↓
-[PRE-PUSH HOOK TRIGGERED]
-         ↓
-┌─ Analizar commits
-│  ├─ Contar commits pendientes
-│  ├─ Mostrar lista de commits
-│  ├─ Mostrar resumen de cambios
-│  └─ Listar archivos modificados
-├─ Verificar seguridad
-│  ├─ Buscar credenciales
-│  ├─ Buscar variables de entorno
-│  └─ Buscar claves privadas
-├─ Si encuentra sospechosos
-│  └─ ❌ BLOQUEAR PUSH
-└─ Si todo OK
-   ├─ Mostrar resumen
-   ├─ Pedir confirmación del usuario
-   ├─ Si usuario confirma (Y)
-   │  └─ ✅ PERMITIR PUSH
-   └─ Si usuario rechaza (N)
-      └─ ❌ CANCELAR PUSH (commits seguros en local)
-```
-
-## Pantalla de Confirmación
-
-```
-════════════════════════════════════════════════════════════════
-🔐 PRE-PUSH CONFIRMATION HOOK
-════════════════════════════════════════════════════════════════
-
-📤 Push Detection:
-   Remote: origin
-   URL: https://github.com/gcarlossuarez/FormValidateLocalContest
-
-📋 Commits a Empujar:
-   • d51fb26 - docs: Agregar documentación de skill diff-code-review
-   • 642d418 - fix: Reorganizar layout a pantalla completa
-
-📊 Resumen de Cambios:
-   FormMain.cs              |  54 +++++-
-   FormMain.Designer.cs     | 238 ++++++++++++++++++++
-   LAYOUT_REORGANIZADO.md   | 220 +++++++++++++++++++
-   3 files changed, 512 insertions(+)
-
-📁 Archivos Modificados:
-   • FormMain.cs
-   • FormMain.Designer.cs
-   • LAYOUT_REORGANIZADO.md
-
-🔒 Verificación de Seguridad:
-   ✅ No se detectaron archivos con credenciales
-
-════════════════════════════════════════════════════════════════
-❓ ¿Deseas proceder con el push de 2 commit(s)?
-
-   Opciones:
-   [Y/y] - Confirmar y hacer push
-   [N/n] - Cancelar push
-
-Tu respuesta: █
-```
+| Patrón | Descripción | Ejemplo |
+|--------|-------------|---------|
+| `gh_[A-Za-z0-9_]{36}` | GitHub Classic Token | `gh_16C7e42F292c6912E7710c838347Ae178B4a` |
+| `ghp_[A-Za-z0-9_]{36}` | GitHub Personal Access Token | `ghp_1B3FDScd5mK8zL9nOpQrS4tUvWxYz2jk` |
+| `github_pat_[A-Za-z0-9_]{82}` | GitHub PAT v2 | `github_pat_11AAAA...` |
+| `AKIA[0-9A-Z]{16}` | AWS Access Key ID | `AKIAIOSFODNN7EXAMPLE` |
+| `api[_-]?key` | API Key genérica | `api_key=abc123`, `apiKey: secret` |
+| `password` | Contraseña | `password="MySecure123"` |
+| `-----BEGIN.*PRIVATE KEY-----` | Clave privada | RSA, OpenSSH, PGP |
+| `.env` | Variables de entorno | `.env`, `.env.local`, `.env.production` |
 
 ## Casos de Uso
 
-### Caso 1: Push Normal (Confirmado)
-```
-$ git push origin main
+### Caso 1: Yo (Agente) haciendo Push
+```powershell
+# Pre-push verification
+.\verify-before-push.ps1
 
-🔐 PRE-PUSH CONFIRMATION HOOK
-📋 Commits a Empujar: 1
-...
-❓ ¿Deseas proceder?
-Tu respuesta: Y
-✅ Push confirmado. Proceediendo...
+# Salida:
+# [OK] No se detectaron secretos. Seguro para pushear.
+# (retorna 0)
 
-Pushing to origin...
-[resultado normal de git push]
+# Luego procedo con push
+git push -u origin main
 ```
 
-### Caso 2: Push Rechazado por Usuario
-```
-$ git push origin main
+### Caso 2: Secreto Detectado
+```powershell
+.\verify-before-push.ps1
 
-🔐 PRE-PUSH CONFIRMATION HOOK
-📋 Commits a Empujar: 1
-...
-❓ ¿Deseas proceder?
-Tu respuesta: N
-❌ Push cancelado por el usuario
-💡 Tus commits están seguros en local
-[git push abortado]
+# Salida:
+# [⚠️  ADVERTENCIA] Se detectaron posibles secretos:
+#   - GitHub Token: 1 coincidencia(s)
+# [BLOQUEADO] No se permite push con secretos detectados.
+
+# (retorna 1, no permito push)
 ```
 
-### Caso 3: Push Bloqueado por Seguridad
-```
-$ git push origin main
-
-🔐 PRE-PUSH CONFIRMATION HOOK
-📋 Commits a Empujar: 1
-...
-🔒 Verificación de Seguridad:
-⚠️  ADVERTENCIA: Archivos sospechosos detectados:
-   ❌ config.env
-   ❌ secrets.json
-❌ No se puede continuar con el push
-[git push abortado - seguridad]
-```
-
-## Archivos del Hook
-
-### Windows (Recomendado)
-- `.git/hooks/pre-push.cmd` - Implementación en Batch/PowerShell
-- Compatible con Git Bash y PowerShell
-- Ejecutable desde cualquier cliente Git en Windows
-
-### Linux/Mac
-- `.git/hooks/pre-push` - Implementación en Bash
-- Requiere permisos ejecutables: `chmod +x .git/hooks/pre-push`
-
-## Configuración
-
-El hook se ejecuta automáticamente. No requiere configuración adicional.
-
-### Deshabilitar Temporalmente (si es necesario)
-
+### Caso 3: Tú (Usuario) haciendo Push Manual
 ```bash
-# Renombrar el hook para deshabilitarlo
-mv .git/hooks/pre-push .git/hooks/pre-push.disabled
+git push origin main
 
-# Después de hacer push sin confirmación, restaurar:
-mv .git/hooks/pre-push.disabled .git/hooks/pre-push
+# Va directo, sin verificaciones
+# (libertad total)
 ```
-
-### Forzar Push sin Hook (NO recomendado)
-
-```bash
-# Solo si realmente sabes qué haces:
-git push --no-verify origin main
-```
-
-## Seguridad
-
-### Patrones Detectados
-
-El hook busca automáticamente:
-
-| Patrón | Razón | Ejemplo |
-|--------|-------|---------|
-| `*token*` | Tokens de acceso | `GITHUB_TOKEN`, `api_token` |
-| `*secret*` | Secretos de aplicación | `.env.secrets`, `api_secret` |
-| `*password*` | Contraseñas | `db_password`, `admin_password` |
-| `*credential*` | Credenciales | `.credentials`, `aws_credentials` |
-| `.env*` | Variables de entorno | `.env`, `.env.local` |
-| `*key*` | Claves privadas | `private.key`, `ssh_key` |
-
-### Falsos Positivos
-
-Si necesitas subir un archivo con estos nombres (pero sin datos sensibles):
-
-1. **Opción A**: Renombra temporalmente
-2. **Opción B**: Usa `--no-verify` (después de revisar manualmente)
-3. **Opción C**: Agrega a `.gitignore` si no debe versionarse
 
 ## Instalación
 
-El hook ya está instalado en `.git/hooks/`. Se ejecuta automáticamente con cada `git push`.
+Los scripts ya están en la raíz del proyecto:
+- ✅ `verify-before-push.ps1`
+- ✅ `safe-push.cmd`
 
-Para verificar que funciona:
+No requieren instalación adicional.
 
-```bash
-git push origin main
-```
+## Diferencia con v1.0.0
 
-Deberías ver el prompt de confirmación.
-
-## Monitoreo
-
-El hook verifica antes de cada push:
-- ✅ Commits pendientes
-- ✅ Archivos modificados
-- ✅ Credenciales/secrets
-- ✅ Confirmación del usuario
+| Aspecto | v1.0.0 (Hooks) | v2.0.0 (Scripts) |
+|--------|---|---|
+| **Bloquea usuario** | ❌ Sí, hook automático | ✅ No, scripts opcionales |
+| **Bloquea agente** | ❌ No | ✅ Sí, si hay secretos |
+| **Ejecuta automático** | ✅ Sí (hook pre-push) | ❌ No, llamada explícita |
+| **Interactividad** | ⚠️ Problemas en batch | ✅ No requiere interacción |
+| **Configuración usuario** | ❌ Hook rompe flujo | ✅ Usuario tiene libertad |
 
 ## Futuras Mejoras
 
+- [ ] Integración con GitHub push protection nativa
+- [ ] Análisis de diff antes de push
 - [ ] Registro de auditoría automático
-- [ ] Integración con GitHub Actions
-- [ ] Validación de mensajes de commit
-- [ ] Verificación de firmas GPG
-- [ ] Notificaciones por email de pushes
-
-## Referencias
-
-- [Git Hooks](https://git-scm.com/book/en/v2/Customizing-Git-Git-Hooks)
-- [Pre-push Hook Docs](https://git-scm.com/docs/githooks#_pre_push)
-- [GitHub Security Best Practices](https://docs.github.com/en/code-security)
+- [ ] Validación de firmas GPG
+- [ ] Notificaciones de push exitosos
 
 ---
 
 **Última actualización**: 2026-10-11  
-**Versión**: 1.0.0  
-**Estado**: Activo en repositorio
+**Versión**: 2.0.0  
+**Estado**: Activo - Scripts sin hooks automáticos
