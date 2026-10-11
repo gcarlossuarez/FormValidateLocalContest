@@ -1,0 +1,62 @@
+# Binarios y objetos compilados
+bin/
+obj/
+*.dll
+*.exe
+*.pdb
+
+# Archivos de IDE
+.vs/
+.vscode/
+*.sln.user
+*.vcxproj.user
+*.csproj.user
+*.user
+.idea/
+*.swp
+*.swo
+*~
+
+# Herramientas de Copilot (local, no comprometer)
+.copilot/
+.copilot/output/
+.instructions-*
+.instructions.generated*
+.prompt.generated*
+.agent.md
+
+# Archivos temporales de compilación
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+
+# Archivos del Sistema Operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node modules (si se usa con TypeScript/JS)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Archivos de datos sensibles
+*.key
+*.pem
+*.password
+secrets.json
+appsettings.local.json
+
+# Cache
+.cache/
+.pytest_cache/
+__pycache__/
+
+# Directorios de test generados
+TestResults/
+CoverageResults/
+
+# Outputs de skills (generado automáticamente, no comprometer)
+# Estos se guardan en .copilot/output/ que ya está en .gitignore
