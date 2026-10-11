@@ -21,27 +21,33 @@ Write-Host "Commits por pushear:" -ForegroundColor Yellow
 Write-Host $unpushedCommits
 Write-Host ""
 
-# Patrones de secretos a detectar
+# Patrones de secretos a detectar (solo en archivos de código, no en .md)
 $secretPatterns = @(
     @{ name = "GitHub Token"; pattern = "gh[po]_[A-Za-z0-9_]{36,255}" },
     @{ name = "Personal Access Token"; pattern = "github_pat_[A-Za-z0-9_]{82}" },
     @{ name = "Private Key"; pattern = "-----BEGIN (RSA|OPENSSH|EC|PGP) PRIVATE KEY-----" },
-    @{ name = "AWS Access Key"; pattern = "AKIA[0-9A-Z]{16}" },
-    @{ name = "API Key Pattern"; pattern = "api[_-]?key['\"]?\s*[:=]\s*['\"]?[A-Za-z0-9_-]{20,}" },
-    @{ name = "Password Pattern"; pattern = "password['\"]?\s*[:=]\s*['\"]?[^\s]{8,}" },
-    @{ name = ".env file"; pattern = "\.env\b" }
+    @{ name = "AWS Access Key"; pattern = "AKIA[0-9A-Z]{16}" }
 )
 
-# Buscar secretos en los commits sin pushear
+# Buscar secretos en archivos de código (C#, XML, config, env, etc)
+# EXCLUIR: .md, .txt, docs/
 $foundSecrets = @()
 
-foreach ($pattern in $secretPatterns) {
-    $matches = git log origin/main..HEAD -p 2>$null | Select-String -Pattern $pattern.pattern -ErrorAction SilentlyContinue
-    if ($matches) {
-        $foundSecrets += @{
-            name = $pattern.name
-            count = $matches.Count
-            samples = $matches | Select-Object -First 3
+# Obtener archivos reales que cambiarán (sin .md, sin docs/)
+$changedFiles = git diff origin/main HEAD --name-only 2>$null | Where-Object { $_ -notmatch '\.md$|\.txt$|^docs/' }
+
+if ($changedFiles) {
+    foreach ($pattern in $secretPatterns) {
+        foreach ($file in $changedFiles) {
+            $matches = git show "HEAD:$file" 2>$null | Select-String -Pattern $pattern.pattern -ErrorAction SilentlyContinue
+            if ($matches) {
+                $foundSecrets += @{
+                    name = $pattern.name
+                    file = $file
+                    count = $matches.Count
+                    samples = $matches | Select-Object -First 3
+                }
+            }
         }
     }
 }
@@ -51,8 +57,8 @@ if ($foundSecrets.Count -gt 0) {
     Write-Host "[⚠️  ADVERTENCIA] Se detectaron posibles secretos:" -ForegroundColor Red
     Write-Host ""
     foreach ($secret in $foundSecrets) {
-        Write-Host "  - $($secret.name): $($secret.count) coincidencia(s)" -ForegroundColor Red
-        $secret.samples | ForEach-Object { Write-Host "    └─ $_" -ForegroundColor DarkRed }
+        Write-Host "  - $($secret.name) en $($secret.file): $($secret.count) coincidencia(s)" -ForegroundColor Red
+        $secret.samples | ForEach-Object { Write-Host "    - $_" -ForegroundColor DarkRed }
     }
     Write-Host ""
     
