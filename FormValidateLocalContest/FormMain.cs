@@ -175,6 +175,25 @@ public partial class FormMain : Form
         // Habilita encodings extendidos (Windows-1252, etc.) en .NET Core/5+/6+/7+/8+
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
     }
+
+    /// <summary>
+    /// Normaliza el texto de código para asegurar que los saltos de línea se preserven correctamente.
+    /// Maneja diferentes formatos de saltos de línea (CRLF, LF) y garantiza UTF-8 consistente.
+    /// </summary>
+    private string NormalizeCodeText(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return text;
+
+        // Reemplaza todos los tipos de saltos de línea con \n primero
+        text = text.Replace("\r\n", "\n").Replace("\r", "\n");
+
+        // Luego convierte \n a Environment.NewLine (CRLF en Windows)
+        text = text.Replace("\n", Environment.NewLine);
+
+        return text;
+    }
+
     /// <summary>
     /// BOOKMARK: Llena el ListBox lstProblemas con los nombres de los problemas extraídos del ZIP.
     /// </summary>
@@ -301,7 +320,8 @@ public partial class FormMain : Form
             selectedFilePath = openFileDialog.FileName;
             try
             {
-                txtCode.Text = File.ReadAllText(selectedFilePath, Encoding.UTF8);
+                string fileContent = File.ReadAllText(selectedFilePath, Encoding.UTF8);
+                txtCode.Text = NormalizeCodeText(fileContent);
                 toolStripStatusLabel.Text = $"Archivo cargado: {Path.GetFileName(selectedFilePath)}";
             }
             catch (Exception ex)
@@ -389,6 +409,38 @@ public partial class FormMain : Form
     {
         cancellationTokenSource?.Cancel();
         btnCancel.Enabled = false;
+    }
+
+    /// <summary>
+    /// Evento: normaliza el texto del código cuando se pega o se escribe.
+    /// Esto asegura que los saltos de línea se preserven correctamente.
+    /// </summary>
+    private static bool isNormalizing = false;
+
+    private void TxtCode_TextChanged(object sender, EventArgs e)
+    {
+        // Evita recursión infinita al normalizar
+        if (isNormalizing) return;
+
+        isNormalizing = true;
+        try
+        {
+            string originalText = txtCode.Text;
+            string normalizedText = NormalizeCodeText(originalText);
+
+            // Solo actualiza si el texto cambió después de normalizar
+            if (originalText != normalizedText)
+            {
+                int cursorPos = txtCode.SelectionStart;
+                txtCode.Text = normalizedText;
+                // Restaura la posición del cursor aproximadamente
+                txtCode.SelectionStart = Math.Min(cursorPos, txtCode.Text.Length);
+            }
+        }
+        finally
+        {
+            isNormalizing = false;
+        }
     }
 
     /// <summary>
