@@ -43,6 +43,13 @@ partial class FormMain
         lstResults = new ListBox();
         lblResults = new Label();
         btnCancel = new Button();
+        cbDatasets = new ComboBox();
+        lblDatasets = new Label();
+        txtStdin = new TextBox();
+        lblStdin = new Label();
+        txtStdout = new TextBox();
+        lblStdout = new Label();
+        btnRunConsole = new Button();
         statusStrip.SuspendLayout();
         SuspendLayout();
         // 
@@ -188,12 +195,88 @@ partial class FormMain
         btnCancel.UseVisualStyleBackColor = true;
         btnCancel.Click += btnCancel_Click;
         // 
+        // lblDatasets
+        // 
+        lblDatasets.AutoSize = true;
+        lblDatasets.Location = new Point(12, 437);
+        lblDatasets.Name = "lblDatasets";
+        lblDatasets.Size = new Size(59, 15);
+        lblDatasets.TabIndex = 14;
+        lblDatasets.Text = "Datasets:";
+        // 
+        // cbDatasets
+        // 
+        cbDatasets.FormattingEnabled = true;
+        cbDatasets.Location = new Point(75, 434);
+        cbDatasets.Name = "cbDatasets";
+        cbDatasets.Size = new Size(337, 23);
+        cbDatasets.TabIndex = 15;
+        cbDatasets.SelectedIndexChanged += cbDatasets_SelectedIndexChanged;
+        // 
+        // lblStdin
+        // 
+        lblStdin.AutoSize = true;
+        lblStdin.Location = new Point(12, 464);
+        lblStdin.Name = "lblStdin";
+        lblStdin.Size = new Size(46, 15);
+        lblStdin.TabIndex = 16;
+        lblStdin.Text = "Entrada:";
+        // 
+        // txtStdin
+        // 
+        txtStdin.Font = new Font("Consolas", 9F);
+        txtStdin.Location = new Point(12, 482);
+        txtStdin.Multiline = true;
+        txtStdin.Name = "txtStdin";
+        txtStdin.ScrollBars = ScrollBars.Both;
+        txtStdin.Size = new Size(400, 100);
+        txtStdin.TabIndex = 17;
+        txtStdin.WordWrap = false;
+        // 
+        // lblStdout
+        // 
+        lblStdout.AutoSize = true;
+        lblStdout.Location = new Point(420, 464);
+        lblStdout.Name = "lblStdout";
+        lblStdout.Size = new Size(52, 15);
+        lblStdout.TabIndex = 18;
+        lblStdout.Text = "Salida:";
+        // 
+        // txtStdout
+        // 
+        txtStdout.Font = new Font("Consolas", 9F);
+        txtStdout.Location = new Point(420, 482);
+        txtStdout.Multiline = true;
+        txtStdout.Name = "txtStdout";
+        txtStdout.ReadOnly = true;
+        txtStdout.ScrollBars = ScrollBars.Both;
+        txtStdout.Size = new Size(560, 100);
+        txtStdout.TabIndex = 19;
+        txtStdout.WordWrap = false;
+        // 
+        // btnRunConsole
+        // 
+        btnRunConsole.Location = new Point(836, 434);
+        btnRunConsole.Name = "btnRunConsole";
+        btnRunConsole.Size = new Size(144, 30);
+        btnRunConsole.TabIndex = 20;
+        btnRunConsole.Text = "Ejecutar Consola";
+        btnRunConsole.UseVisualStyleBackColor = true;
+        btnRunConsole.Click += btnRunConsole_Click;
+        // 
         // Form1
         // 
         AutoScaleDimensions = new SizeF(7F, 15F);
         AutoScaleMode = AutoScaleMode.Font;
         ClientSize = new Size(1000, 670);
         StartPosition = FormStartPosition.CenterScreen;
+        Controls.Add(btnRunConsole);
+        Controls.Add(txtStdout);
+        Controls.Add(lblStdout);
+        Controls.Add(txtStdin);
+        Controls.Add(lblStdin);
+        Controls.Add(cbDatasets);
+        Controls.Add(lblDatasets);
         Controls.Add(btnCancel);
         Controls.Add(lblResults);
         Controls.Add(lstResults);
@@ -233,4 +316,11 @@ partial class FormMain
     private ListBox lstResults;
     private Label lblResults;
     private Button btnCancel;
+    private ComboBox cbDatasets;
+    private Label lblDatasets;
+    private TextBox txtStdin;
+    private Label lblStdin;
+    private TextBox txtStdout;
+    private Label lblStdout;
+    private Button btnRunConsole;
 }

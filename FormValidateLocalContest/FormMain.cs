@@ -124,6 +124,9 @@ public partial class FormMain : Form
 
     // Ruta donde se extrae el ZIP incrustado
     private string? extractedProblemsPath;
+    
+    // Archivo de datos seleccionado (datos*.txt)
+    private string? selectedDataFile;
 
     public FormMain()
     {
@@ -390,6 +393,7 @@ public partial class FormMain : Form
 
     /// <summary>
     /// Evento: cuando el usuario selecciona un problema del ListBox, se actualiza el directorio de trabajo y se muestra la descripción.
+    /// También carga los datasets disponibles.
     /// </summary>
     private void lstProblems_SelectedIndexChanged(object sender, EventArgs e)
     {
@@ -404,6 +408,9 @@ public partial class FormMain : Form
         txtProblemaDir.Text = problemPath;
         problemaDirectory = problemPath;
         toolStripStatusLabel.Text = $"Problema seleccionado: {selectedProblem}";
+
+        // Cargar datasets disponibles
+        LoadAvailableDatasets(problemPath);
 
         // Buscar y mostrar la descripción del problema (.docx)
         try
@@ -422,6 +429,102 @@ public partial class FormMain : Form
         catch (Exception ex)
         {
             txtDescripcion.Text = $"Error al leer la descripción: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Carga los archivos datos*.txt disponibles del problema en el ComboBox y limpia el stdin/stdout.
+    /// </summary>
+    /// <param name="problemPath">Ruta del directorio del problema</param>
+    private void LoadAvailableDatasets(string problemPath)
+    {
+        cbDatasets.Items.Clear();
+        selectedDataFile = null;
+        txtStdin.Clear();
+        txtStdout.Clear();
+
+        try
+        {
+            string inDir = Path.Combine(problemPath, "IN");
+            
+            if (!Directory.Exists(inDir))
+            {
+                cbDatasets.Items.Add("No hay directorio IN");
+                cbDatasets.SelectedIndex = 0;
+                cbDatasets.Enabled = false;
+                return;
+            }
+
+            var dataFiles = Directory.GetFiles(inDir, "datos*.txt").OrderBy(f => f).ToList();
+
+            if (dataFiles.Count == 0)
+            {
+                cbDatasets.Items.Add("No hay archivos datos*.txt");
+                cbDatasets.SelectedIndex = 0;
+                cbDatasets.Enabled = false;
+                return;
+            }
+
+            // Agregar archivos encontrados
+            foreach (var dataFile in dataFiles)
+            {
+                string fileName = Path.GetFileName(dataFile);
+                cbDatasets.Items.Add(fileName);
+            }
+
+            cbDatasets.SelectedIndex = 0;
+            cbDatasets.Enabled = true;
+        }
+        catch (Exception ex)
+        {
+            cbDatasets.Items.Add($"Error: {ex.Message}");
+            cbDatasets.SelectedIndex = 0;
+            cbDatasets.Enabled = false;
+        }
+    }
+
+    /// <summary>
+    /// Evento: cuando el usuario selecciona un archivo datos*.txt, carga su contenido en txtStdin.
+    /// </summary>
+    private void cbDatasets_SelectedIndexChanged(object sender, EventArgs e)
+    {
+        if (cbDatasets.SelectedIndex < 0 || string.IsNullOrEmpty(problemaDirectory))
+        {
+            txtStdin.Clear();
+            return;
+        }
+
+        string selectedDataset = cbDatasets.SelectedItem?.ToString() ?? "";
+
+        if (selectedDataset.Contains("No hay") || selectedDataset.Contains("Error"))
+        {
+            txtStdin.Clear();
+            return;
+        }
+
+        // Construir ruta completa del archivo
+        string dataFile = Path.Combine(problemaDirectory, "IN", selectedDataset);
+        selectedDataFile = dataFile;
+
+        try
+        {
+            if (File.Exists(dataFile))
+            {
+                // Leer contenido como UTF-8 sin BOM
+                using (var reader = new StreamReader(dataFile, new UTF8Encoding(false)))
+                {
+                    txtStdin.Text = reader.ReadToEnd();
+                }
+                toolStripStatusLabel.Text = $"Dataset cargado: {selectedDataset}";
+            }
+            else
+            {
+                txtStdin.Text = $"Error: No se pudo encontrar el archivo {dataFile}";
+            }
+        }
+        catch (Exception ex)
+        {
+            txtStdin.Text = $"Error al leer el archivo: {ex.Message}";
         }
     }
 
@@ -499,6 +602,136 @@ public partial class FormMain : Form
     }
 
     /// <summary>
+    /// BOOKMARK: Ejecuta el programa compilado con el contenido del txtStdin como entrada estándar.
+    /// Muestra el resultado en txtStdout. Esta es una prueba rápida, no evaluación oficial.
+    /// </summary>
+    private async void btnRunConsole_Click(object sender, EventArgs e)
+    {
+        if (string.IsNullOrEmpty(problemaDirectory))
+        {
+            MessageBox.Show("Selecciona un problema primero", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        if (string.IsNullOrEmpty(txtCode.Text))
+        {
+            MessageBox.Show("Escribe o carga código C# primero", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        try
+        {
+            btnRunConsole.Enabled = false;
+            btnCompileAndRun.Enabled = false;
+            txtStdout.Text = "Compilando y ejecutando...";
+            Application.DoEvents();
+
+            // Buscar el .csproj
+            string[] csprojFiles = Directory.GetFiles(problemaDirectory!, "*.csproj");
+            if (csprojFiles.Length == 0)
+            {
+                MessageBox.Show("No se encontró un archivo .csproj en el problema", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            string csprojPath = csprojFiles[0];
+            const int buildTimeoutMs = 300_000;
+
+            // Crear directorio de trabajo
+            string workDir = Path.Combine(problemaDirectory!, $"WorkDir_{DateTime.Now:yyyyMMddHHmmss}_{Guid.NewGuid():N}");
+            Directory.CreateDirectory(workDir);
+
+            try
+            {
+                // Copiar .csproj
+                File.Copy(csprojPath, Path.Combine(workDir, Path.GetFileName(csprojPath)), true);
+
+                // Guardar código en Program.cs
+                string programPath = Path.Combine(workDir, "Program.cs");
+                await File.WriteAllTextAsync(programPath, txtCode.Text, Encoding.UTF8);
+
+                // Compilar
+                var compileResult = await RunProcessAsync("dotnet", "build", workDir, buildTimeoutMs);
+                
+                if (compileResult.ExitCode != 0)
+                {
+                    txtStdout.Text = $"❌ Error de compilación:\n{compileResult.Output}\n{compileResult.Error}";
+                    return;
+                }
+
+                // Buscar el ejecutable
+                var binDebug = Path.Combine(workDir, "bin", "Debug");
+                if (!Directory.Exists(binDebug))
+                {
+                    txtStdout.Text = "❌ No se encontró el directorio bin/Debug";
+                    return;
+                }
+
+                var frameworks = Directory.GetDirectories(binDebug);
+                string? exePath = null;
+                foreach (var fwDir in frameworks)
+                {
+                    var exes = Directory.GetFiles(fwDir, "*.exe");
+                    if (exes.Length > 0)
+                    {
+                        exePath = exes[0];
+                        break;
+                    }
+                }
+
+                if (string.IsNullOrEmpty(exePath))
+                {
+                    txtStdout.Text = "❌ No se encontró el ejecutable compilado";
+                    return;
+                }
+
+                // Guardar stdin en archivo temporal
+                string tempInputFile = Path.Combine(Path.GetTempPath(), $"input_{Guid.NewGuid():N}.txt");
+                await File.WriteAllTextAsync(tempInputFile, txtStdin.Text, new UTF8Encoding(false));
+
+                try
+                {
+                    // Ejecutar con stdin
+                    var runResult = await RunProcessWithRedirectionAsync(exePath, tempInputFile, problemaDirectory!, 30_000);
+
+                    if (runResult.TimedOut)
+                    {
+                        txtStdout.Text = $"⏱️ Timeout - El programa tardó más de 30 segundos";
+                    }
+                    else if (runResult.ExitCode != 0)
+                    {
+                        txtStdout.Text = $"❌ Error (Código {runResult.ExitCode}):\n{runResult.Error}\n\n📤 Salida:\n{runResult.Output}";
+                    }
+                    else
+                    {
+                        txtStdout.Text = $"✅ Ejecutado exitosamente\n\n📤 Salida:\n{runResult.Output}";
+                    }
+
+                    toolStripStatusLabel.Text = "Ejecución de consola completada";
+                }
+                finally
+                {
+                    try { File.Delete(tempInputFile); } catch { }
+                }
+            }
+            finally
+            {
+                // Limpiar directorio de trabajo
+                try { Directory.Delete(workDir, true); } catch { }
+            }
+        }
+        catch (Exception ex)
+        {
+            txtStdout.Text = $"❌ Error: {ex.Message}";
+        }
+        finally
+        {
+            btnRunConsole.Enabled = true;
+            btnCompileAndRun.Enabled = true;
+        }
+    }
+
+    /// <summary>
     /// BOOKMARK: Compila el código fuente proporcionado y ejecuta las pruebas en el
     /// directorio del problema.
     /// </summary>
@@ -524,7 +757,7 @@ public partial class FormMain : Form
             throw new DirectoryNotFoundException($"No se encontró el directorio OUT en {problemaDirectory}");
         }
 
-        // Buscar el archivo .csproj en el directorio del problema
+        // Buscar el archivo .csproj en el directorio del problema (NO en el dataset)
         string[] csprojFiles = Directory.GetFiles(problemaDirectory!, "*.csproj");
         if (csprojFiles.Length == 0)
         {

@@ -21,7 +21,7 @@ This project is a Windows WinForms application designed to locally validate prog
 
 You can generate a self-contained executable (does not require .NET to be installed on the target PC) using the following command in PowerShell or CMD:
 
-```
+```powershell
 dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true
 ```
 
@@ -32,7 +32,7 @@ dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=
 
 The final executable will be located in:
 
-```
+```Powershell
 FormValidateLocalContest\bin\Release\net10.0-windows\win-x64\publish\
 ```
 
@@ -46,4 +46,4 @@ You only need to distribute that `.exe` (and Problems.zip if you want it externa
 
 ---
 
-If you have questions or need to customize the publishing process, see the official .NET documentation: https://learn.microsoft.com/dotnet/core/deploying/
+If you have questions or need to customize the publishing process, see the official .NET documentation: <https://learn.microsoft.com/dotnet/core/deploying/>
