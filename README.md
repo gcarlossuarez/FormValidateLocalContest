@@ -18,7 +18,7 @@ Aplicación Windows Forms para validar programas C# contra casos de prueba de fo
 
 Cada problema debe tener la siguiente estructura:
 
-```
+```text
 Problema/
 ├── problema.csproj          (Archivo de proyecto .NET)
 ├── IN/                      (Carpeta con archivos de entrada)
@@ -33,7 +33,7 @@ Problema/
     └── [archivos generados durante la ejecución]
 ```
 
-### Archivos importantes:
+### Archivos importantes`:`
 
 1. **problema.csproj**: Archivo de proyecto de consola .NET que se usa como plantilla
 2. **IN/datos<n>.txt**: Archivos de entrada numerados secuencialmente
@@ -80,18 +80,21 @@ Se incluye un problema de ejemplo en la carpeta `EjemploProblema`:
 **Descripción**: Lee dos líneas con dos números cada una y muestra la suma de cada par.
 
 **Entrada de ejemplo** (datos1.txt):
-```
+
+```text
 5 3
 10 20
 ```
 
 **Salida esperada** (Output_datos1.txt):
-```
+
+```text
 8
 30
 ```
 
 **Programa de ejemplo** (ProgramaEjemplo.cs):
+
 ```csharp
 string? line1 = Console.ReadLine();
 string? line2 = Console.ReadLine();
@@ -114,15 +117,79 @@ if (line1 != null && line2 != null)
 
 ## Ejecución
 
-### Desde Visual Studio:
+### Desde Visual Studio`:`
+
 1. Abre la solución en Visual Studio
 2. Presiona F5 para compilar y ejecutar
 
-### Desde línea de comandos:
+### Desde línea de comandos`:`
+
 ```powershell
 cd "d:\Proyectos Visual Studio\VSCode\FormValidateLocalContest\FormValidateLocalContest"
 dotnet run
 ```
+
+## Generar Publicación
+
+La aplicación soporta múltiples versiones de .NET (.NET 8, 9 y 10). Puedes generar publicaciones para cualquiera de ellas.
+
+### Comando General
+
+```powershell
+dotnet publish -c Release --framework <FRAMEWORK> -o <RUTA_SALIDA>
+```
+
+### Opciones
+
+| Opción | Descripción |
+| -------- | ------------- |
+| `-c Release` | Compila en modo Release (optimizado y sin debug) |
+| `--framework <FRAMEWORK>` | Especifica cuál versión de .NET publicar |
+| `-o <RUTA>` | Especifica dónde guardar la publicación |
+
+### Ejemplos
+
+**Para .NET 8:**
+
+```powershell
+cd "d:\Universidad Católica Boliviana\migration-to-the-cloud\analisis_nube\fuentes\FormValidateLocalContest\FormValidateLocalContest"
+dotnet publish -c Release --framework net8.0-windows -o "bin\Release\publish\net8.0"
+```
+
+**Para .NET 9:**
+
+```powershell
+dotnet publish -c Release --framework net9.0-windows -o "bin\Release\publish\net9.0"
+```
+
+**Para .NET 10:**
+
+```powershell
+dotnet publish -c Release --framework net10.0-windows -o "bin\Release\publish\net10.0"
+```
+
+**Generar todas las versiones a la vez:**
+
+```powershell
+dotnet publish -c Release
+```
+
+Esta última opción generará automáticamente las tres versiones en:
+
+- `bin\Release\net8.0-windows\`
+- `bin\Release\net9.0-windows\`
+- `bin\Release\net10.0-windows\`
+
+### Archivos Generados
+
+Cada publicación incluye:
+
+- `FormValidateLocalContest.exe` - Ejecutable de la aplicación
+- `FormValidateLocalContest.dll` - Librería principal
+- `FormValidateLocalContest.pdb` - Información de debug (opcional)
+- `FormValidateLocalContest.deps.json` - Dependencias
+- `FormValidateLocalContest.runtimeconfig.json` - Configuración en tiempo de ejecución
+- Dependencias externas (ej: `DocumentFormat.OpenXml.dll`)
 
 ## Notas Técnicas
 
@@ -134,17 +201,21 @@ dotnet run
 
 ## Solución de Problemas
 
-**Error: "No se encontró el directorio IN"**
+### Error: "No se encontró el directorio IN"
+
 - Verifica que el directorio del problema contenga una carpeta llamada exactamente "IN"
 
-**Error: "No se encontró un archivo .csproj"**
+### Error: "No se encontró un archivo .csproj"
+
 - Asegúrate de que existe un archivo .csproj en la raíz del directorio del problema
 
-**Timeout constante**
+### Timeout constante
+
 - Aumenta el valor de timeout en el campo correspondiente
 - Revisa que el programa no tenga bucles infinitos
 
-**Comparación siempre falla**
+### Comparación siempre falla
+
 - Revisa el directorio OutputGenerado para ver la salida real
 - Verifica que los archivos esperados estén en UTF-8
 - Comprueba que no haya espacios extras al final de las líneas

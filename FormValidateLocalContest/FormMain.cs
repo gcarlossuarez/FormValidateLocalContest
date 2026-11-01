@@ -128,6 +128,10 @@ public partial class FormMain : Form
     // Archivo de datos seleccionado (datos*.txt)
     private string? selectedDataFile;
 
+    /// <summary>
+    /// Constructor de la clase FormMain.
+    /// Inicializa los componentes del formulario y configura la extracción del ZIP de problemas.
+    /// </summary>
     public FormMain()
     {
         InitializeComponent();
@@ -217,7 +221,9 @@ public partial class FormMain : Form
     /// BOOKMARK: Extrae el recurso incrustado Problems.zip a un directorio temporal y retorna la ruta de extracción.
     /// </summary>
     /// <returns>Ruta del directorio donde se extrajo el ZIP</returns>
-    // Nueva versión asíncrona con progreso
+    /// <remarks>
+    /// Nueva versión asíncrona con progreso de la extracción del ZIP incrustado.
+    /// </remarks>  
     private async Task ExtractEmbeddedZipToTempWithProgress()
     {
         Invoke(new Action(() =>
@@ -309,6 +315,11 @@ public partial class FormMain : Form
         }));
     }
 
+    /// <summary>
+    /// Maneja el evento de clic del botón para seleccionar un archivo C#.
+    /// </summary>
+    /// <param name="sender"></param>
+    /// <param name="e"></param>
     private void btnSelectFile_Click(object sender, EventArgs e)
     {
         using OpenFileDialog openFileDialog = new()
@@ -334,6 +345,11 @@ public partial class FormMain : Form
         }
     }
 
+    /// <summary>
+    /// Maneja el evento de clic del botón para seleccionar el directorio del problema.
+    /// </summary>
+    /// <param name="sender"></param>
+    /// <param name="e"></param>
     private void btnSelectProblemaDir_Click(object sender, EventArgs e)
     {
         using FolderBrowserDialog folderDialog = new()
@@ -350,6 +366,11 @@ public partial class FormMain : Form
         }
     }
 
+    /// <summary>
+    /// Maneja el evento de clic del botón para compilar y ejecutar las pruebas.
+    /// </summary>
+    /// <param name="sender"></param>
+    /// <param name="e"></param>
     private async void btnCompileAndRun_Click(object sender, EventArgs e)
     {
         if (string.IsNullOrWhiteSpace(txtCode.Text))
@@ -407,6 +428,12 @@ public partial class FormMain : Form
         }
     }
 
+    /// <summary>
+    /// Evento: se dispara cuando el usuario hace clic en el botón Cancelar.
+    /// </summary>
+    /// <param name="sender">El objeto que generó el evento.</param>
+    /// <param name="e">Argumentos del evento.</param>
+    /// <returns></returns>
     private void btnCancel_Click(object sender, EventArgs e)
     {
         cancellationTokenSource?.Cancel();
@@ -419,6 +446,12 @@ public partial class FormMain : Form
     /// </summary>
     private static bool isNormalizing = false;
 
+    /// <summary>
+    /// Evento: se dispara cuando el texto del código cambia.
+    /// </summary>
+    /// <param name="sender">El objeto que generó el evento.</param>
+    /// <param name="e">Argumentos del evento.</param>
+    /// <returns></returns>
     private void TxtCode_TextChanged(object sender, EventArgs e)
     {
         // Evita recursión infinita al normalizar
@@ -630,6 +663,11 @@ public partial class FormMain : Form
         }
 
         // Método auxiliar para obtener el texto de una celda respetando los saltos de línea internos
+        /// <summary>
+        /// Obtiene el texto de una celda de tabla respetando los saltos de línea internos.
+        /// </summary>
+        /// <param name="cell">La celda de la tabla de la que se desea obtener el texto.</param>
+        /// <returns>El texto de la celda con los saltos de línea preservados.</returns>    
         string GetCellTextWithBreaks(DocumentFormat.OpenXml.Wordprocessing.TableCell cell)
         {
             var cellSb = new System.Text.StringBuilder();
@@ -791,9 +829,9 @@ public partial class FormMain : Form
     /// BOOKMARK: Compila el código fuente proporcionado y ejecuta las pruebas en el
     /// directorio del problema.
     /// </summary>
-    /// <param name="timeoutSeconds"></param>
-    /// <param name="cancellationToken"></param>
-    /// <returns></returns>
+    /// <param name="timeoutSeconds">Tiempo máximo de ejecución en segundos.</param>
+    /// <param name="cancellationToken">Token para cancelar la operación.</param>
+    /// <returns>Una tarea que representa la operación asincrónica.</returns>
     /// <exception cref="DirectoryNotFoundException"></exception>
     /// <exception cref="FileNotFoundException"></exception>
     /// <exception cref="IOException"></exception>
@@ -1268,7 +1306,13 @@ public partial class FormMain : Form
         }
     }
 
-    private string NormalizeOutput(string output)
+    /// <summary>
+    /// Normaliza la salida de un proceso: unifica los saltos de línea,
+    /// elimina espacios al final de cada línea y quita las líneas vacías finales.
+    /// </summary>
+    /// <param name="output">Texto de salida a normalizar.</param>
+    /// <returns>La salida normalizada.</returns>
+    private static string NormalizeOutput(string output)
     {
         // Normalizar saltos de línea y eliminar espacios al final de cada línea
         var lines = output.Replace("\r\n", "\n").Split('\n')
@@ -1284,6 +1328,14 @@ public partial class FormMain : Form
         return string.Join("\n", lines);
     }
 
+    /// <summary>
+    /// Ejecuta un proceso externo y captura su salida y error estándar.
+    /// </summary>
+    /// <param name="fileName">El nombre del archivo ejecutable a ejecutar.</param>
+    /// <param name="arguments">Los argumentos a pasar al proceso.</param>
+    /// <param name="workingDirectory">El directorio de trabajo del proceso.</param>
+    /// <param name="timeoutMs">El tiempo máximo de espera en milisegundos.</param>
+    /// <returns>Un objeto ProcessResult con la información del proceso.</returns>
     private async Task<ProcessResult> RunProcessAsync(string fileName, string arguments, 
         string workingDirectory, int timeoutMs)
     {
