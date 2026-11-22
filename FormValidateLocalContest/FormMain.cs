@@ -164,18 +164,38 @@ public partial class FormMain : Form
         // formulario mientras se extrae.
         Task.Run(async () =>
         {
-            btnCompileAndRun.Enabled = false;
-            btnRunConsole.Enabled = false;
-            btnSelectProblemaDir.Enabled = false;
-            await ExtractEmbeddedZipToTempWithProgress();
-            // Una vez extraído, llena el ListBox en el hilo de la UI
-            Invoke(new Action(() => PopulateProblemsListBox()));
             Invoke(new Action(() =>
             {
-                btnCompileAndRun.Enabled = true;
-                btnSelectProblemaDir.Enabled = true;
-                btnRunConsole.Enabled = true;
+                btnCompileAndRun.Enabled = false;
+                btnRunConsole.Enabled = false;
+                btnSelectProblemaDir.Enabled = false;
             }));
+            try
+            {
+                await ExtractEmbeddedZipToTempWithProgress();
+                // Una vez extraído, llena el ListBox en el hilo de la UI
+                Invoke(new Action(() =>
+                {
+                    PopulateProblemsListBox();
+                    btnCompileAndRun.Enabled = true;
+                    btnSelectProblemaDir.Enabled = true;
+                    btnRunConsole.Enabled = true;
+                }));
+            }
+            catch (Exception ex)
+            {
+                Invoke(new Action(() =>
+                {
+                    progressBarExtract.Visible = false;
+                    labelExtractStatus.Text = "No se pudieron cargar los problemas.";
+                    labelExtractStatus.Visible = true;
+                    btnCompileAndRun.Enabled = true;
+                    btnSelectProblemaDir.Enabled = true;
+                    btnRunConsole.Enabled = true;
+                    MessageBox.Show($"No se pudieron cargar los problemas: {ex.Message}",
+                        "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }));
+            }
         });
 
         // Habilita encodings extendidos (Windows-1252, etc.) en .NET Core/5+/6+/7+/8+
@@ -206,15 +226,24 @@ public partial class FormMain : Form
     private void PopulateProblemsListBox()
     {
         if (string.IsNullOrEmpty(extractedProblemsPath) || !Directory.Exists(extractedProblemsPath))
+        {
+            lstProblems.Items.Clear();
+            toolStripStatusLabel.Text = "No se encontró una carpeta de problemas válida.";
             return;
+        }
 
         // Se asume que cada subdirectorio es un problema
-        var dirs = Directory.GetDirectories(extractedProblemsPath);
+        var dirs = Directory.GetDirectories(extractedProblemsPath)
+            .OrderBy(dir => Path.GetFileName(dir), StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         lstProblems.Items.Clear();
         foreach (var dir in dirs)
         {
             lstProblems.Items.Add(Path.GetFileName(dir));
         }
+
+        if (lstProblems.Items.Count == 0)
+            toolStripStatusLabel.Text = "El ZIP no contiene carpetas de problemas.";
     }
 
     /// <summary>
@@ -235,11 +264,21 @@ public partial class FormMain : Form
             Refresh();
         }));
 
-        var resourceName = "FormValidateLocalContest.Problems.zip";
+        var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+        var resourceName = assembly.GetManifestResourceNames()
+            .FirstOrDefault(name =>
+                name.Equals("FormValidateLocalContest.Problems.zip", StringComparison.OrdinalIgnoreCase) ||
+                name.EndsWith(".Problems.zip", StringComparison.OrdinalIgnoreCase));
+
+        if (resourceName == null)
+        {
+            resourceName = "FormValidateLocalContest.Problems.zip";
+        }
+
         var tempDir = Path.Combine(Path.GetTempPath(), "ProblemasContest_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
 
-        using var stream = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName);
+        using var stream = assembly.GetManifestResourceStream(resourceName);
         if (stream == null)
         {
             Invoke(new Action(() =>
@@ -306,7 +345,10 @@ public partial class FormMain : Form
         // Eliminar el ZIP temporal
         File.Delete(tempZipPath);
 
-        extractedProblemsPath = Path.Combine(tempDir, "Problems");
+        string problemsFolder = Path.Combine(tempDir, "Problems");
+        extractedProblemsPath = Directory.Exists(problemsFolder)
+            ? problemsFolder
+            : tempDir;
 
         Invoke(new Action(() =>
         {
